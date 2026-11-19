@@ -1060,3 +1060,58 @@ hooks.boot.push(() => {
     refreshCookieDump();
   }, 1000);
 });
+
+const AUDITED_ACTIONS = ["marcar_entrada", "marcar_salida", "corregir_asistencia", "solicitar_permiso", "aprobar_permiso", "rechazar_permiso", "aprobar_masivo", "registrar_empleado"];
+
+const describeRequest = (req) => {
+  const d = req.data || {};
+  const parts = [];
+  if (d.empleadoId) {
+    const e = byId(db.empleados, d.empleadoId);
+    parts.push(`empleado_dni=${e ? e.dni : d.empleadoId}`);
+  }
+  if (d.permisoId) {
+    parts.push(`permiso=${d.permisoId}`);
+  }
+  if (Array.isArray(d.ids)) {
+    parts.push(`permisos=${d.ids.join(",")}`);
+  }
+  if (d.registroId) {
+    parts.push(`registro=${d.registroId} antes=${d.antes} despues=${d.despues} motivo=${d.motivo}`);
+  }
+  if (d.fecha && d.hora) {
+    parts.push(`fecha=${d.fecha} hora=${d.hora}`);
+  }
+  if (d.inicio && d.fin) {
+    parts.push(`tipo=${d.tipo} del=${d.inicio} al=${d.fin}`);
+  }
+  if (d.dni && !d.empleadoId) {
+    parts.push(`dni=${d.dni}`);
+  }
+  return parts.join(" ");
+};
+
+useMiddleware("bloqueo", (req, next) => {
+  const username = req.kind === "action" && req.name === "login" ? req.data.username : req.user && req.user.username;
+  const user = db.users.find((u) => u.username === username);
+  if (user && !user.activo) {
+    writeLog("WARNING", "cuenta_desactivada_bloqueada", `usuario=${user.username}`);
+    if (req.user) {
+      window.setTimeout(() => endSession("logout"), 0);
+    }
+    return { ok: false, status: 403, reason: "La cuenta esta desactivada. Contacta con RRHH." };
+  }
+  return next();
+}, true);
+
+useMiddleware("auditoria", (req, next) => {
+  const res = next();
+  if (req.kind === "action" && AUDITED_ACTIONS.includes(req.name)) {
+    if (res.ok) {
+      writeLog("AUDIT", req.name, describeRequest(req));
+    } else {
+      writeLog("WARNING", `${req.name}_rechazado`, `motivo=${res.reason}`);
+    }
+  }
+  return res;
+});
