@@ -1115,3 +1115,17 @@ useMiddleware("auditoria", (req, next) => {
   }
   return res;
 });
+
+useMiddleware("horario", (req, next) => {
+  if (req.kind === "action" && (req.name === "marcar_entrada" || req.name === "marcar_salida")) {
+    const { fecha, hora } = req.data;
+    if (!isWorkday(fecha)) {
+      return { ok: false, status: 422, reason: "Hoy no es dia laborable. No se permite registrar asistencia." };
+    }
+    const ref = req.name === "marcar_entrada" ? 8 * 60 : 17 * 60;
+    if (Math.abs(toMin(hora) - ref) > 120) {
+      return { ok: false, status: 422, reason: `Fuera de rango horario: la ${req.name === "marcar_entrada" ? "entrada" : "salida"} solo se permite entre ${fromMin(ref - 120)} y ${fromMin(ref + 120)} (horario ${fromMin(ref)} mas o menos 2 horas).` };
+    }
+  }
+  return next();
+});
