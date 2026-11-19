@@ -819,3 +819,26 @@ const endSession = (reason) => {
     toast("Sesion cerrada por inactividad.", "error");
   }
 };
+
+const renderSessionBar = () => {
+  const bar = $("#session-bar");
+  if (!state.user) {
+    bar.innerHTML = `<div class="session-chip">${pill("Invitado", "amber")}<span class="text-muted">Sin sesion activa. Solo puedes ver Sesion, Roles y Manual.</span></div>`;
+    return;
+  }
+  bar.innerHTML = `
+    <div class="session-chip">${pill(state.user.grupo, "violet")}<strong>${esc(nombreUsuario())}</strong><span class="text-caption">Usuario: ${esc(state.user.username)}</span>
+      <span class="text-caption">Sesion expira en <strong id="session-countdown" class="mono">--:--</strong></span></div>
+    <button class="btn btn-surface btn-small" type="button" data-logout>Cerrar sesion</button>`;
+  $("[data-logout]", bar).addEventListener("click", () => endSession("logout"));
+  updateCountdown();
+};
+
+const updateCountdown = () => {
+  const node = $("#session-countdown");
+  if (!node || !session) {
+    return;
+  }
+  const remaining = Math.max(0, Math.ceil((SESSION_SECONDS * 1000 - (Date.now() - session.last)) / 1000));
+  node.textContent = `${pad(Math.floor(remaining / 60))}:${pad(remaining % 60)}`;
+};
