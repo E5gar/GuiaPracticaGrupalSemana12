@@ -173,3 +173,119 @@ const byId = (list, id) => list.find((item) => item.id === Number(id));
 const fullName = (p) => `${p.apellidos}, ${p.nombres}`;
 const nextId = (list) => list.reduce((max, item) => Math.max(max, item.id), 0) + 1;
 const areaName = (id) => byId(db.areas, id).nombre;
+
+const toast = (message, kind = "ok") => {
+  const region = $("#toast-region");
+  const node = document.createElement("div");
+  node.className = `toast toast-${kind}`;
+  node.textContent = message;
+  region.appendChild(node);
+  window.setTimeout(() => node.remove(), 4200);
+};
+
+const fieldHtml = (f) => {
+  let control;
+  if (f.type === "select") {
+    control = `<select id="${f.id}" name="${f.id}">${f.options.map((o) => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join("")}</select>`;
+  } else if (f.type === "textarea") {
+    control = `<textarea id="${f.id}" name="${f.id}" rows="${f.rows || 3}" placeholder="${esc(f.placeholder || "")}"></textarea>`;
+  } else {
+    control = `<input id="${f.id}" name="${f.id}" type="${f.type || "text"}" placeholder="${esc(f.placeholder || "")}" ${f.attrs || ""} autocomplete="off">`;
+  }
+  const hint = f.hint ? `<span class="field-hint">${esc(f.hint)}</span>` : "";
+  return `<div class="field${f.wide ? " field-wide" : ""}"><label for="${f.id}">${esc(f.label)}</label>${control}${hint}<p class="field-error" data-error-for="${f.id}" role="alert"></p></div>`;
+};
+
+const setErrors = (form, errors) => {
+  $$("[data-error-for]", form).forEach((node) => {
+    const message = errors[node.dataset.errorFor] || "";
+    node.textContent = message;
+    const input = $(`#${node.dataset.errorFor}`, form);
+    if (input) {
+      input.classList.toggle("is-invalid", Boolean(message));
+    }
+  });
+};
+
+const readForm = (form) => {
+  const data = {};
+  new FormData(form).forEach((value, key) => {
+    data[key] = typeof value === "string" ? value.trim() : value;
+  });
+  return data;
+};
+
+const pill = (text, color) => `<span class="pill pill-${color}">${esc(text)}</span>`;
+const estadoPill = (estado) => pill(estado, estado === "completada" ? "green" : estado === "cancelada" ? "amber" : "blue");
+
+const middlewares = [];
+const useMiddleware = (name, fn, first = false) => {
+  const entry = { name, fn };
+  if (first) {
+    middlewares.unshift(entry);
+  } else {
+    middlewares.push(entry);
+  }
+};
+
+const dispatch = (req) => {
+  req.user = state.user;
+  let index = 0;
+  const next = () => {
+    const mw = middlewares[index];
+    index += 1;
+    if (!mw) {
+      return { ok: true, status: 200 };
+    }
+    return mw.fn(req, next);
+  };
+  return next();
+};
+
+const views = [];
+const registerView = (view) => {
+  views.push(view);
+  views.sort((a, b) => a.order - b.order);
+};
+
+const deniedHtml = (res) => `
+  <div class="panel denied stack-sm">
+    <div class="flex-wrap items-center">${pill(`Error ${res.status}`, "amber")}</div>
+    <h2 class="h3">${res.status === 401 ? "Autenticacion requerida" : "Acceso denegado"}</h2>
+    <p class="text-muted">${esc(res.reason)}</p>
+    <div class="form-actions"><button class="btn btn-primary" type="button" data-go="sesion">Ir a Sesion</button></div>
+  </div>`;
+
+const renderTabs = () => {
+  const nav = $("#tabs");
+  nav.innerHTML = views.map((v) => `<button type="button" class="tab${v.id === state.view ? " is-active" : ""}" data-view="${v.id}">${esc(v.title)}</button>`).join("");
+  $$("button", nav).forEach((button) => button.addEventListener("click", () => navigate(button.dataset.view)));
+};
+
+const renderApp = () => {
+  renderTabs();
+  const view = views.find((v) => v.id === state.view) || views[0];
+  const host = $("#view");
+  host.innerHTML = "";
+  const res = dispatch({ kind: "view", name: view.id, perm: view.perm });
+  if (res.ok) {
+    view.render(host);
+  } else {
+    host.innerHTML = deniedHtml(res);
+    const go = $("[data-go]", host);
+    if (go) {
+      go.addEventListener("click", () => navigate(go.dataset.go));
+    }
+  }
+  hooks.render.forEach((fn) => fn());
+};
+
+const navigate = (id) => {
+  state.view = id;
+  renderApp();
+};
+
+const optionsFrom = (list, labelFn, placeholder) => {
+  const options = list.map((item) => ({ value: item.id, label: labelFn(item) }));
+  return placeholder ? [{ value: "", label: placeholder }, ...options] : options;
+};
