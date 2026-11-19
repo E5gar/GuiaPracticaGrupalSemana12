@@ -591,3 +591,103 @@ const renderCorreccion = (host) => {
     renderCorreccion(host);
   });
 };
+
+const validatePermiso = (d, empleadoId) => {
+  const errors = {};
+  if (!d.tipo) {
+    errors.tipo = "Selecciona el tipo de permiso.";
+  }
+  if (!d.inicio) {
+    errors.inicio = "Selecciona la fecha de inicio.";
+  }
+  if (!d.fin) {
+    errors.fin = "Selecciona la fecha de fin.";
+  } else if (d.inicio && d.fin < d.inicio) {
+    errors.fin = "La fecha de fin debe ser igual o posterior a la fecha de inicio.";
+  }
+  if (sanitize(d.motivo).length < 30) {
+    errors.motivo = `El motivo detallado debe tener al menos 30 caracteres (actual: ${sanitize(d.motivo).length}).`;
+  }
+  if (!errors.inicio && !errors.fin) {
+    const clash = db.permisos.find((p) => p.empleadoId === empleadoId && p.estado !== "rechazado" && d.inicio <= p.fin && d.fin >= p.inicio);
+    if (clash) {
+      errors.inicio = `Se superpone con un permiso ${clash.estado} del ${clash.inicio} al ${clash.fin}.`;
+    }
+  }
+  if (!errors.inicio && !errors.fin && d.tipo === "vacaciones") {
+    const solicitados = daysBetween(d.inicio, d.fin) + 1;
+    const disponibles = 30 - vacacionesTomadas(empleadoId, true);
+    if (solicitados > disponibles) {
+      errors.fin = `Solicitas ${solicitados} dias pero solo tienes ${disponibles} dias de vacaciones disponibles.`;
+    }
+  }
+  return errors;
+};
+
+const permisosTable = (list, withEmpleado) => `
+  <div class="table-wrap"><table class="data-table">
+    <thead><tr>${withEmpleado ? "<th>Empleado</th>" : ""}<th>Tipo</th><th>Inicio</th><th>Fin</th><th>Dias</th><th>Estado</th><th>Motivo</th></tr></thead>
+    <tbody>${list.length === 0 ? `<tr><td colspan="7" class="empty-state">Sin permisos registrados.</td></tr>` : list.map((p) => `<tr>${withEmpleado ? `<td>${esc(fullName(byId(db.empleados, p.empleadoId)))}</td>` : ""}<td>${esc(p.tipo)}</td><td>${esc(p.inicio)}</td><td>${esc(p.fin)}</td><td>${diasDe(p)}</td><td>${permisoPill(p.estado)}</td><td class="wrap">${esc(p.motivo)}</td></tr>`).join("")}</tbody>
+  </table></div>`;
+
+const renderPermisos = (host) => {
+  const fields = [
+    { id: "tipo", label: "Tipo de permiso", type: "select", options: [{ value: "", label: "Selecciona el tipo" }, { value: "personal", label: "Personal" }, { value: "medico", label: "Medico" }, { value: "duelo", label: "Duelo" }, { value: "maternidad/paternidad", label: "Maternidad/paternidad" }, { value: "vacaciones", label: "Vacaciones" }, { value: "otro", label: "Otro" }] },
+    { id: "inicio", label: "Fecha de inicio", type: "date" },
+    { id: "fin", label: "Fecha de fin", type: "date" },
+    { id: "adjunto", label: "Documento adjunto (descripcion simulada)", placeholder: "Ejemplo: Certificado medico del hospital" },
+    { id: "motivo", label: "Motivo detallado (minimo 30 caracteres)", type: "textarea", wide: true }
+  ];
+  host.innerHTML = `
+    <div class="panel stack-md">
+      <div class="panel-head"><div class="stack-xs"><h2 class="h3">Solicitud de permiso o vacaciones</h2><p class="text-muted">Validacion de fechas, superposicion y dias de vacaciones disponibles.</p></div>${pill("Formulario complejo", "violet")}</div>
+      <form id="form-permiso" class="stack-md" novalidate>
+        ${actorSelectHtml()}
+        <div class="form-grid">${fields.map(fieldHtml).join("")}</div>
+        <p class="text-caption" id="vac-info"></p>
+        <div class="form-actions"><button class="btn btn-primary" type="submit">Enviar solicitud</button><button class="btn btn-surface" type="reset">Limpiar</button></div>
+      </form>
+    </div>
+    <div class="panel stack-md"><h2 class="h3">Mis solicitudes</h2><div id="mis-permisos"></div></div>
+    <div class="panel stack-md"><h2 class="h3">Notificaciones</h2><div id="mis-notificaciones" class="stack-xs"></div></div>`;
+  const form = $("#form-permiso", host);
+  const refresh = () => {
+    const id = actorId(host);
+    $("#vac-info", host).textContent = `Vacaciones disponibles: ${vacacionesDisponibles(id)} de 30 dias (aprobadas descontadas).`;
+    $("#mis-permisos", host).innerHTML = permisosTable(db.permisos.filter((p) => p.empleadoId === id).sort((a, b) => b.inicio.localeCompare(a.inicio)), false);
+    const notes = db.notificaciones.filter((n) => n.empleadoId === id).slice(-5).reverse();
+    $("#mis-notificaciones", host).innerHTML = notes.length === 0 ? `<p class="text-muted">No tienes notificaciones.</p>` : notes.map((n) => `<p class="notice notice-info">${esc(n.ts)} - ${esc(n.texto)}</p>`).join("");
+  };
+  refresh();
+  const actor = $("#actor", host);
+  if (actor) {
+    actor.addEventListener("change", refresh);
+  }
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const data = readForm(form);
+    data.motivo = sanitize(data.motivo);
+    data.adjunto = sanitize(data.adjunto);
+    const empleadoId = actorId(host);
+    const errors = validatePermiso(data, empleadoId);
+    setErrors(form, errors);
+    if (Object.keys(errors).length > 0) {
+      toast("La solicitud no cumple las validaciones.", "error");
+      return;
+    }
+    const res = dispatch({ kind: "action", name: "solicitar_permiso", perm: "solicitar_permiso", data: { empleadoId, tipo: data.tipo, inicio: data.inicio, fin: data.fin } });
+    if (!res.ok) {
+      toast(res.reason, "error");
+      return;
+    }
+    db.permisos.push({ id: nextId(db.permisos), empleadoId, tipo: data.tipo, inicio: data.inicio, fin: data.fin, motivo: data.motivo, adjunto: data.adjunto, estado: "pendiente", creado: nowIso(), resueltoPor: "" });
+    saveDb();
+    form.reset();
+    toast("Solicitud enviada. Queda pendiente de aprobacion.");
+    refresh();
+  });
+};
+
+registerView({ id: "marcacion", title: "Marcacion", order: 40, perm: "registrar_asistencia", render: renderMarcacion });
+registerView({ id: "permisos", title: "Permisos", order: 50, perm: "solicitar_permiso", render: renderPermisos });
+registerView({ id: "correccion", title: "Correccion", order: 70, perm: "corregir_asistencia", render: renderCorreccion });
