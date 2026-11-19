@@ -1,0 +1,57 @@
+{% extends "prestamos/base.html" %}
+
+{% block title %}Middleware de Auditoria - UNCP{% endblock %}
+
+{% block content %}
+  <section class="section-compact">
+    <div class="container">
+      <div class="anim-scope stack-md">
+        <div class="flex-wrap items-center justify-between">
+          <div class="stack-xs">
+            <span class="anim-scope-chip">RF4 - Solo Administrador</span>
+            <h1 class="h2">Logs de Auditoria y Seguridad</h1>
+            <p class="text-muted">Lorem ipsum dolor sit amet, consectetur adipiscing elit. Registro de acciones criticas e intentos de acceso no autorizado.</p>
+          </div>
+          <a class="btn btn-surface" href="/admin/prestamos/logauditoria/">Ver en Django Admin</a>
+        </div>
+
+        <div class="anim-scope-card table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Fecha y hora</th>
+                <th>Usuario</th>
+                <th>IP</th>
+                <th>Accion</th>
+                <th>Detalle</th>
+                <th>Tipo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for log in logs %}
+                <tr>
+                  <td>{{ log.fecha_hora|date:"Y-m-d H:i:s" }}</td>
+                  <td>{{ log.username_snapshot }}</td>
+                  <td>{{ log.ip|default:"-" }}</td>
+                  <td>{{ log.accion }}</td>
+                  <td>{{ log.detalle|default:"-" }}</td>
+                  <td>
+                    {% if log.es_intento_no_autorizado %}
+                      <span class="pill pill-violet">Bloqueo / Alerta</span>
+                    {% else %}
+                      <span class="pill pill-green">Normal</span>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="6">Sin registros de auditoria.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+{% endblock %}

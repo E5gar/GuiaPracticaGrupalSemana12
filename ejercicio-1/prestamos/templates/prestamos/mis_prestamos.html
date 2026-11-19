@@ -1,0 +1,87 @@
+{% extends "prestamos/base.html" %}
+
+{% block title %}Listado de Prestamos - UNCP{% endblock %}
+
+{% block content %}
+  <section class="section-compact">
+    <div class="container">
+      <div class="anim-scope stack-md">
+        <div class="flex-wrap items-center justify-between">
+          <div class="stack-xs">
+            <span class="anim-scope-chip">RF3 y RF5 - Control de Prestamos</span>
+            <h1 class="h2">Historial de Prestamos</h1>
+          </div>
+          <div class="flex-wrap items-center">
+            {% if user.rol == 'docente' or user.rol == 'asistente' or user.rol == 'admin' or user.is_superuser %}
+              <a class="btn btn-primary" href="{% url 'prestamos:solicitar_prestamo' %}">Nuevo prestamo</a>
+            {% endif %}
+            {% if user.rol == 'asistente' or user.is_superuser %}
+              <a class="btn btn-surface" href="{% url 'prestamos:registrar_devolucion' %}">Registrar devolucion</a>
+            {% endif %}
+          </div>
+        </div>
+
+        <form class="anim-scope-card filter-bar" method="get">
+          <div class="field-group">
+            <label class="field-label" for="id-estado-prestamo">Filtrar por estado</label>
+            <select class="field-select" id="id-estado-prestamo" name="estado">
+              <option value="">Todos</option>
+              <option value="activo" {% if estado_filtro == 'activo' %}selected{% endif %}>Activo</option>
+              <option value="vencido" {% if estado_filtro == 'vencido' %}selected{% endif %}>Vencido</option>
+              <option value="devuelto" {% if estado_filtro == 'devuelto' %}selected{% endif %}>Devuelto</option>
+            </select>
+          </div>
+          <div class="field-actions">
+            <button class="btn btn-primary" type="submit">Filtrar</button>
+            <a class="btn btn-surface" href="{% url 'prestamos:mis_prestamos' %}">Todos</a>
+          </div>
+        </form>
+
+        <div class="anim-scope-card table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Docente</th>
+                <th>Equipo</th>
+                <th>Cant.</th>
+                <th>Prestamo</th>
+                <th>Devolucion</th>
+                <th>Estado</th>
+                <th>Dias de retraso</th>
+                <th>Recordatorio</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for p in prestamos %}
+                <tr>
+                  <td>#{{ p.id }}</td>
+                  <td>{{ p.docente.get_full_name|default:p.docente.username }}</td>
+                  <td>{{ p.equipo.codigo_patrimonial }} - {{ p.equipo.nombre }}</td>
+                  <td>{{ p.cantidad }}</td>
+                  <td>{{ p.fecha_prestamo|date:"Y-m-d" }}</td>
+                  <td>{{ p.fecha_devolucion|date:"Y-m-d" }}</td>
+                  <td>
+                    {% if p.estado == 'devuelto' %}
+                      <span class="pill pill-green">Devuelto</span>
+                    {% elif p.estado == 'activo' %}
+                      <span class="pill pill-amber">Activo</span>
+                    {% else %}
+                      <span class="pill pill-violet">Vencido</span>
+                    {% endif %}
+                  </td>
+                  <td>{{ p.dias_retraso }} dias</td>
+                  <td>{% if p.recordatorio_enviado %}Enviado{% else %}Pendiente{% endif %}</td>
+                </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="9">No existen prestamos para mostrar.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+{% endblock %}

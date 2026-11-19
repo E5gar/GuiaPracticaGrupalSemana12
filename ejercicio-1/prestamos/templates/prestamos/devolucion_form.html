@@ -1,0 +1,31 @@
+{% extends "prestamos/base.html" %}
+
+{% block title %}Registrar Devolucion - UNCP{% endblock %}
+
+{% block content %}
+  <section class="section-compact">
+    <div class="container stack-md">
+      <div class="stack-xs">
+        <span class="pill pill-amber">RF2 y RF3 - Solo Asistente</span>
+        <h1 class="h2">Registro de Devolucion de Equipo</h1>
+        <p class="text-muted">Lorem ipsum dolor sit amet, consectetur adipiscing elit. Verifica la condicion fisica al retorno y actualiza stock disponible.</p>
+      </div>
+
+      <form class="card stack-sm" method="post">
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        {% for field in form %}
+          <div class="field-group">
+            <label class="field-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {{ field.errors }}
+          </div>
+        {% endfor %}
+        <div class="flex-wrap items-center">
+          <button class="btn btn-primary" type="submit">Registrar devolucion</button>
+          <a class="btn btn-surface" href="{% url 'prestamos:mis_prestamos' %}">Ver listado</a>
+        </div>
+      </form>
+    </div>
+  </section>
+{% endblock %}
