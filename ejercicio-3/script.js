@@ -1185,3 +1185,59 @@ const renderAuditoria = (host) => {
 };
 
 registerView({ id: "auditoria", title: "Auditoria", order: 80, perm: "ver_auditoria", render: renderAuditoria });
+
+const reportScope = () => (can("ver_reportes_globales") ? db.empleados : db.empleados.filter((e) => e.areaId === miArea()));
+
+const renderReportes = (host) => {
+  const global = can("ver_reportes_globales");
+  const fechas = Array.from(new Set(db.asistencias.map((a) => a.fecha))).sort().reverse();
+  host.innerHTML = `
+    <div class="panel stack-md">
+      <div class="panel-head"><div class="stack-xs"><h2 class="h3">Asistencia diaria</h2><p class="text-muted">${global ? "Reporte global, solo lectura." : `Reporte limitado al area ${esc(areaName(miArea()))}.`}</p></div>${pill(global ? "Alcance global" : "Alcance de area", global ? "violet" : "blue")}</div>
+      <div class="form-grid">
+        <div class="field"><label for="rep-area">Area</label><select id="rep-area">${global ? `<option value="">Todas las areas</option>` : ""}${db.areas.filter((a) => global || a.id === miArea()).map((a) => `<option value="${a.id}">${esc(a.nombre)}</option>`).join("")}</select></div>
+        <div class="field"><label for="rep-fecha">Fecha</label><select id="rep-fecha">${fechas.map((f) => `<option value="${f}">${f}</option>`).join("")}</select></div>
+      </div>
+      <div id="rep-diaria"></div>
+    </div>
+    <div class="panel stack-md">
+      <div class="panel-head"><div class="stack-xs"><h2 class="h3">Horas extras por empleado</h2><p class="text-muted">Acumulado de horas sobre la jornada de 8 horas.</p></div></div>
+      <div id="rep-extras" class="stack-sm"></div>
+    </div>
+    <div class="panel stack-md">
+      <div class="panel-head"><div class="stack-xs"><h2 class="h3">Exportacion de datos (simulada)</h2><p class="text-muted">Genera un texto separado por comas con el reporte filtrado.</p></div><button class="btn btn-surface" type="button" id="rep-exportar">Generar texto</button></div>
+      <pre class="code-block" id="rep-texto" hidden></pre>
+    </div>`;
+  const filtered = () => {
+    const area = $("#rep-area", host).value;
+    const ids = reportScope().filter((e) => !area || e.areaId === Number(area)).map((e) => e.id);
+    return ids;
+  };
+  const refresh = () => {
+    const ids = filtered();
+    const fecha = $("#rep-fecha", host).value;
+    const diaria = db.asistencias.filter((a) => ids.includes(a.empleadoId) && a.fecha === fecha).sort((a, b) => a.entrada.localeCompare(b.entrada));
+    $("#rep-diaria", host).innerHTML = asistenciaTable(diaria, true);
+    const extras = ids.map((id) => ({ e: byId(db.empleados, id), total: db.asistencias.filter((a) => a.empleadoId === id).reduce((sum, a) => sum + calcExtras(a), 0) })).sort((a, b) => b.total - a.total);
+    const max = Math.max(...extras.map((x) => x.total), 1);
+    $("#rep-extras", host).innerHTML = extras.map((x) => `<div class="bar-row"><span class="bar-label">${esc(fullName(x.e))} - ${esc(areaName(x.e.areaId))}</span><div class="bar-track"><div class="bar-fill" style="--w: ${Math.round((x.total / max) * 100)}%;"></div></div><strong class="bar-value">${x.total.toFixed(1)}</strong></div>`).join("");
+    $("#rep-texto", host).hidden = true;
+  };
+  $("#rep-area", host).addEventListener("change", refresh);
+  $("#rep-fecha", host).addEventListener("change", refresh);
+  refresh();
+  $("#rep-exportar", host).addEventListener("click", () => {
+    const ids = filtered();
+    const fecha = $("#rep-fecha", host).value;
+    const lines = ["fecha,empleado,area,entrada,salida,horas,extras"];
+    db.asistencias.filter((a) => ids.includes(a.empleadoId) && a.fecha === fecha).forEach((a) => {
+      const e = byId(db.empleados, a.empleadoId);
+      lines.push([a.fecha, fullName(e).replace(",", ""), areaName(e.areaId), a.entrada, a.salida || "", calcHoras(a).toFixed(2), calcExtras(a).toFixed(2)].join(","));
+    });
+    const node = $("#rep-texto", host);
+    node.textContent = lines.join("\n");
+    node.hidden = false;
+    writeLog("INFO", "exportar_reporte", `fecha=${fecha} filas=${lines.length - 1}`);
+    toast("Texto de exportacion generado.");
+  });
+};
