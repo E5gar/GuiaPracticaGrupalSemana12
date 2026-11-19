@@ -1129,3 +1129,27 @@ useMiddleware("horario", (req, next) => {
   }
   return next();
 });
+
+const showRecordatorio = (user) => {
+  const region = $("#alert-region");
+  if (!region) {
+    return;
+  }
+  region.innerHTML = "";
+  const emp = byId(db.empleados, user.empleadoId);
+  if (!emp || !PERMS[user.grupo].includes("registrar_asistencia") || !isWorkday(nowIso())) {
+    return;
+  }
+  const marco = db.asistencias.some((a) => a.empleadoId === emp.id && a.fecha === nowIso());
+  if (!marco) {
+    region.innerHTML = `<p class="notice notice-info">Recordatorio del middleware: hoy es dia laborable y aun no marcaste tu entrada.</p>`;
+    writeLog("INFO", "recordatorio_asistencia", `empleado_dni=${emp.dni}`);
+  }
+};
+
+hooks.afterLogin.push(showRecordatorio);
+hooks.boot.push(() => {
+  if (state.user) {
+    showRecordatorio(state.user);
+  }
+});
