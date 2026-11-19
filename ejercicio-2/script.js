@@ -1125,3 +1125,28 @@ useMiddleware("horario", (req, next) => {
   }
   return next();
 });
+
+const showMedicoAlerts = (user) => {
+  const region = $("#alert-region");
+  region.innerHTML = "";
+  if (!user || user.grupo !== "Medicos") {
+    return;
+  }
+  const hoy = todayIso();
+  const pendientes = db.citas.filter((c) => c.medicoId === user.medicoId && c.estado === "pendiente" && c.fecha >= hoy);
+  const deHoy = pendientes.filter((c) => c.fecha === hoy);
+  region.innerHTML = `<p class="notice notice-info">Alerta del middleware: tienes ${pendientes.length} citas pendientes, ${deHoy.length} de ellas para hoy.</p>`;
+  writeLog("INFO", "alerta_citas_pendientes", `pendientes=${pendientes.length} hoy=${deHoy.length}`);
+};
+
+hooks.afterLogin.push(showMedicoAlerts);
+hooks.boot.push(() => {
+  if (state.user) {
+    const region = $("#alert-region");
+    const hoy = todayIso();
+    if (state.user.grupo === "Medicos" && region) {
+      const pendientes = db.citas.filter((c) => c.medicoId === state.user.medicoId && c.estado === "pendiente" && c.fecha >= hoy);
+      region.innerHTML = `<p class="notice notice-info">Alerta del middleware: tienes ${pendientes.length} citas pendientes.</p>`;
+    }
+  }
+});
