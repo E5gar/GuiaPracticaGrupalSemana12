@@ -289,3 +289,134 @@ const optionsFrom = (list, labelFn, placeholder) => {
   const options = list.map((item) => ({ value: item.id, label: labelFn(item) }));
   return placeholder ? [{ value: "", label: placeholder }, ...options] : options;
 };
+
+const antiguedad = (ingreso) => {
+  const start = new Date(`${ingreso}T00:00:00`);
+  const end = nowDate();
+  let months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+  if (end.getDate() < start.getDate()) {
+    months -= 1;
+  }
+  months = Math.max(0, months);
+  return `${Math.floor(months / 12)} anios y ${months % 12} meses`;
+};
+
+const miEmpleado = () => (state.user ? byId(db.empleados, state.user.empleadoId) : null);
+const miArea = () => (miEmpleado() ? miEmpleado().areaId : null);
+
+const scopeEmpleados = () => {
+  if (state.user && state.user.grupo === "Jefe de Area") {
+    return db.empleados.filter((e) => e.areaId === miArea());
+  }
+  return db.empleados;
+};
+
+const validateEmpleado = (d) => {
+  const errors = {};
+  if (!/^\d{8}$/.test(d.dni || "")) {
+    errors.dni = "El DNI debe tener exactamente 8 digitos numericos.";
+  } else if (db.empleados.some((e) => e.dni === d.dni)) {
+    errors.dni = "El DNI ya esta registrado en el sistema (debe ser unico).";
+  }
+  if (sanitize(d.nombres).length < 2) {
+    errors.nombres = "Ingresa los nombres.";
+  }
+  if (sanitize(d.apellidos).length < 2) {
+    errors.apellidos = "Ingresa los apellidos.";
+  }
+  if (sanitize(d.cargo).length === 0) {
+    errors.cargo = "El cargo no puede estar vacio.";
+  }
+  if (!/^[a-z0-9._-]+@tecnoandes\.pe$/i.test(d.email || "")) {
+    errors.email = "El correo corporativo debe tener el formato usuario@tecnoandes.pe.";
+  } else if (db.empleados.some((e) => e.email === d.email.toLowerCase())) {
+    errors.email = "Ya existe un empleado con ese correo corporativo.";
+  }
+  if (!d.ingreso) {
+    errors.ingreso = "Selecciona la fecha de ingreso.";
+  } else if (d.ingreso > todayIso()) {
+    errors.ingreso = "La fecha de ingreso no puede ser futura.";
+  }
+  if (!d.salario || Number(d.salario) <= 0) {
+    errors.salario = "Ingresa un salario mensual valido.";
+  }
+  return errors;
+};
+
+const renderEmpleados = (host) => {
+  const fields = [
+    { id: "dni", label: "DNI", placeholder: "8 digitos", attrs: 'inputmode="numeric" maxlength="12"' },
+    { id: "nombres", label: "Nombres" },
+    { id: "apellidos", label: "Apellidos" },
+    { id: "cargo", label: "Cargo" },
+    { id: "area", label: "Area", type: "select", options: db.areas.map((a) => ({ value: a.id, label: a.nombre })) },
+    { id: "ingreso", label: "Fecha de ingreso", type: "date", attrs: `max="${todayIso()}"` },
+    { id: "contrato", label: "Tipo de contrato", type: "select", options: [{ value: "planilla", label: "Planilla" }, { value: "locacion", label: "Locacion de servicios" }] },
+    { id: "email", label: "Correo corporativo", type: "email", placeholder: "usuario@tecnoandes.pe" },
+    { id: "salario", label: "Salario mensual (S/)", type: "number", attrs: 'min="0" step="50"' }
+  ];
+  const formBlock = can("registrar_empleado")
+    ? `<form id="form-empleado" class="stack-md" novalidate>
+        <div class="form-grid">${fields.map(fieldHtml).join("")}</div>
+        <div class="form-actions"><button class="btn btn-primary" type="submit">Registrar empleado</button><button class="btn btn-surface" type="reset">Limpiar</button></div>
+      </form>`
+    : `<p class="text-muted">Solo el Admin RRHH puede registrar empleados.</p>`;
+  host.innerHTML = `
+    <div class="panel stack-md">
+      <div class="panel-head"><div class="stack-xs"><h2 class="h3">Registro de empleados</h2><p class="text-muted">DNI unico, correo corporativo y fecha de ingreso validados.</p></div>${pill(`${db.empleados.length} empleados`, "violet")}</div>
+      ${formBlock}
+    </div>
+    <div class="panel stack-md">
+      <div class="panel-head"><h2 class="h3">Nomina</h2>
+        <div class="field"><label class="sr-only" for="filtro-area">Filtrar por area</label>
+          <select id="filtro-area"><option value="">Todas las areas</option>${db.areas.map((a) => `<option value="${a.id}">${esc(a.nombre)}</option>`).join("")}</select>
+        </div>
+      </div>
+      <div id="tabla-empleados"></div>
+    </div>`;
+  const refresh = () => {
+    const area = $("#filtro-area", host).value;
+    const list = scopeEmpleados().filter((e) => !area || e.areaId === Number(area));
+    const salaryVisible = can("ver_salarios");
+    $("#tabla-empleados", host).innerHTML = `<div class="table-wrap"><table class="data-table">
+      <thead><tr><th>DNI</th><th>Empleado</th><th>Cargo</th><th>Area</th><th>Contrato</th><th>Ingreso</th><th>Antiguedad</th><th>Salario</th></tr></thead>
+      <tbody>${list.map((e) => `<tr><td>${salaryVisible || !state.user ? esc(e.dni) : esc(e.dni.slice(0, 2) + "******")}</td><td>${esc(fullName(e))}${e.activo ? "" : " " + pill("inactivo", "amber")}</td><td>${esc(e.cargo)}</td><td>${esc(areaName(e.areaId))}</td><td>${pill(e.contrato, e.contrato === "planilla" ? "blue" : "violet")}</td><td>${esc(e.ingreso)}</td><td>${esc(antiguedad(e.ingreso))}</td><td>${salaryVisible ? `S/ ${Number(e.salario).toLocaleString("es-PE")}` : "Restringido"}</td></tr>`).join("")}</tbody>
+    </table></div><p class="text-caption">${list.length} empleados mostrados. Salarios y datos personales solo visibles para RRHH.</p>`;
+  };
+  $("#filtro-area", host).addEventListener("change", refresh);
+  refresh();
+  const form = $("#form-empleado", host);
+  if (!form) {
+    return;
+  }
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const data = readForm(form);
+    data.nombres = sanitize(data.nombres);
+    data.apellidos = sanitize(data.apellidos);
+    data.cargo = sanitize(data.cargo);
+    const errors = validateEmpleado(data);
+    setErrors(form, errors);
+    if (Object.keys(errors).length > 0) {
+      toast("Revisa los campos marcados en el formulario.", "error");
+      return;
+    }
+    const res = dispatch({ kind: "action", name: "registrar_empleado", perm: "registrar_empleado", data });
+    if (!res.ok) {
+      toast(res.reason, "error");
+      return;
+    }
+    db.empleados.push({ id: nextId(db.empleados), dni: data.dni, nombres: data.nombres, apellidos: data.apellidos, cargo: data.cargo, areaId: Number(data.area), ingreso: data.ingreso, contrato: data.contrato, email: data.email.toLowerCase(), salario: Number(data.salario), activo: true });
+    saveDb();
+    form.reset();
+    toast("Empleado registrado correctamente.");
+    renderApp();
+  });
+};
+
+registerView({ id: "empleados", title: "Empleados", order: 30, perm: "ver_equipo", render: renderEmpleados });
+
+document.addEventListener("DOMContentLoaded", () => {
+  hooks.boot.forEach((fn) => fn());
+  renderApp();
+});
