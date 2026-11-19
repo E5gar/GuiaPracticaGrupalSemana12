@@ -968,3 +968,95 @@ const renderRoles = (host) => {
 
 registerView({ id: "sesion", title: "Sesion", order: 10, perm: null, render: renderSesion });
 registerView({ id: "roles", title: "Roles", order: 20, perm: null, render: renderRoles });
+
+const canApprove = (permiso) => {
+  if (!state.user) {
+    return false;
+  }
+  if (state.user.grupo === "Admin RRHH") {
+    return true;
+  }
+  const emp = byId(db.empleados, permiso.empleadoId);
+  return state.user.grupo === "Jefe de Area" && emp.areaId === miArea() && permiso.empleadoId !== state.user.empleadoId;
+};
+
+const resolvePermiso = (permiso, estado) => {
+  const emp = byId(db.empleados, permiso.empleadoId);
+  permiso.estado = estado;
+  permiso.resueltoPor = state.user.username;
+  db.notificaciones.push({ id: nextId(db.notificaciones), empleadoId: emp.id, ts: stamp(), leida: false, texto: `Tu solicitud de ${permiso.tipo} del ${permiso.inicio} al ${permiso.fin} fue ${estado} por ${state.user.username}.` });
+};
+
+const renderAprobaciones = (host) => {
+  const render = () => {
+    const pendientes = db.permisos.filter((p) => p.estado === "pendiente" && (state.user.grupo === "Admin RRHH" || canApprove(p)));
+    const historial = db.permisos.filter((p) => p.estado !== "pendiente" && (state.user.grupo === "Admin RRHH" || byId(db.empleados, p.empleadoId).areaId === miArea())).slice(-6).reverse();
+    host.innerHTML = `
+      <div class="panel stack-md">
+        <div class="panel-head"><div class="stack-xs"><h2 class="h3">Flujo de aprobacion</h2><p class="text-muted">${state.user.grupo === "Admin RRHH" ? "RRHH puede aprobar cualquier permiso." : `Solo puedes aprobar permisos del area ${esc(areaName(miArea()))}, excepto los tuyos.`}</p></div>${pill(`${pendientes.length} pendientes`, "amber")}</div>
+        <div class="table-wrap"><table class="data-table">
+          <thead><tr><th>Empleado</th><th>Area</th><th>Tipo</th><th>Inicio</th><th>Fin</th><th>Dias</th><th>Motivo</th><th>Decision</th></tr></thead>
+          <tbody>${pendientes.length === 0 ? `<tr><td colspan="8" class="empty-state">No hay permisos pendientes de aprobacion.</td></tr>` : pendientes.map((p) => {
+            const emp = byId(db.empleados, p.empleadoId);
+            return `<tr><td>${esc(fullName(emp))}</td><td>${esc(areaName(emp.areaId))}</td><td>${esc(p.tipo)}</td><td>${esc(p.inicio)}</td><td>${esc(p.fin)}</td><td>${diasDe(p)}</td><td class="wrap">${esc(p.motivo)}</td><td><div class="flex-wrap"><button class="btn btn-primary btn-small" type="button" data-decide="aprobado" data-id="${p.id}">Aprobar</button><button class="btn btn-surface btn-small" type="button" data-decide="rechazado" data-id="${p.id}">Rechazar</button></div></td></tr>`;
+          }).join("")}</tbody>
+        </table></div>
+      </div>
+      <div class="panel stack-md"><h2 class="h3">Resoluciones recientes</h2>${permisosTable(historial, true)}</div>`;
+    $$("[data-decide]", host).forEach((button) => button.addEventListener("click", () => {
+      const permiso = byId(db.permisos, button.dataset.id);
+      const estado = button.dataset.decide;
+      if (!canApprove(permiso)) {
+        writeLog("WARNING", "aprobacion_no_autorizada", `permiso=${permiso.id}`);
+        toast("Solo el jefe del area o RRHH pueden resolver este permiso.", "error");
+        return;
+      }
+      const res = dispatch({ kind: "action", name: estado === "aprobado" ? "aprobar_permiso" : "rechazar_permiso", perm: "aprobar_permiso", data: { permisoId: permiso.id, empleadoId: permiso.empleadoId } });
+      if (!res.ok) {
+        toast(res.reason, "error");
+        return;
+      }
+      resolvePermiso(permiso, estado);
+      saveDb();
+      toast(`Permiso ${estado}. Se notifico al empleado.`);
+      render();
+    }));
+  };
+  render();
+};
+
+registerView({ id: "aprobaciones", title: "Aprobaciones", order: 60, perm: "aprobar_permiso", render: renderAprobaciones });
+
+hooks.render.push(renderSessionBar);
+
+hooks.boot.push(() => {
+  state.view = "sesion";
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    if (raw) {
+      const saved = JSON.parse(raw);
+      const user = db.users.find((u) => u.username === saved.username);
+      if (user && Date.now() - saved.last < SESSION_SECONDS * 1000) {
+        session = saved;
+        state.user = user;
+        state.view = defaultView(user);
+      } else {
+        sessionStorage.removeItem(SESSION_KEY);
+      }
+    }
+  } catch (err) {
+    sessionStorage.removeItem(SESSION_KEY);
+  }
+  ["click", "keydown", "touchstart", "scroll"].forEach((name) => document.addEventListener(name, touchSession, { passive: true }));
+  window.setInterval(() => {
+    if (!state.user || !session) {
+      return;
+    }
+    if (Date.now() - session.last >= SESSION_SECONDS * 1000) {
+      endSession("expired");
+      return;
+    }
+    updateCountdown();
+    refreshCookieDump();
+  }, 1000);
+});
