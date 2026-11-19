@@ -945,3 +945,26 @@ const renderSesion = (host) => {
     toast(`Bienvenido, ${nombreUsuario()}.`);
   });
 };
+
+const renderRoles = (host) => {
+  host.innerHTML = `
+    <div class="panel stack-md">
+      <div class="panel-head"><div class="stack-xs"><h2 class="h3">Diagrama de roles y permisos</h2><p class="text-muted">Roles jerarquicos con permisos granulares. El acceso se valida en el middleware de autorizacion.</p></div>${pill("4 roles", "violet")}</div>
+      <div class="grid-2">${GRUPOS.map((g) => `
+        <div class="panel stack-sm role-card">
+          <div class="panel-head"><h3 class="h4">${esc(g)}</h3>${pill(`${PERMS[g].length} permisos`, "blue")}</div>
+          <div class="flex-wrap">${PERMS[g].map((p) => pill(p, "green")).join("")}</div>
+        </div>`).join("")}</div>
+    </div>
+    <div class="panel stack-md">
+      <h2 class="h3">Matriz de permisos</h2>
+      <div class="table-wrap"><table class="data-table matrix">
+        <thead><tr><th>Permiso</th>${GRUPOS.map((g) => `<th>${esc(g)}</th>`).join("")}</tr></thead>
+        <tbody>${ALL_PERMS.map((p) => `<tr><td>${esc(p)}</td>${GRUPOS.map((g) => `<td class="${PERMS[g].includes(p) ? "cell-yes" : "cell-no"}">${PERMS[g].includes(p) ? "Si" : "No"}</td>`).join("")}</tr>`).join("")}</tbody>
+      </table></div>
+      <p class="text-caption">Jefe de Area: gestiona solo su area. Contador: solo lectura de reportes. Admin RRHH: acceso total.</p>
+    </div>`;
+};
+
+registerView({ id: "sesion", title: "Sesion", order: 10, perm: null, render: renderSesion });
+registerView({ id: "roles", title: "Roles", order: 20, perm: null, render: renderRoles });
