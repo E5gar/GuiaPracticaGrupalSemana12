@@ -1182,3 +1182,74 @@ const renderAuditoria = (host) => {
 };
 
 registerView({ id: "auditoria", title: "Auditoria", order: 80, perm: "ver_auditoria", render: renderAuditoria });
+
+const ultimaConsulta = (pacienteId) => {
+  const fechas = db.consultas.filter((k) => k.pacienteId === pacienteId).map((k) => k.fecha).sort();
+  return fechas.length > 0 ? fechas[fechas.length - 1] : null;
+};
+
+const defaultAgenda = () => {
+  const hoy = todayIso();
+  const user = state.user;
+  const list = db.citas.filter((c) => c.estado === "pendiente" && c.fecha >= hoy && (!user || user.grupo !== "Medicos" || c.medicoId === user.medicoId)).sort((a, b) => `${a.fecha}${a.hora}`.localeCompare(`${b.fecha}${b.hora}`));
+  if (list.length > 0) {
+    return { fecha: list[0].fecha, medicoId: list[0].medicoId };
+  }
+  return { fecha: hoy, medicoId: user && user.medicoId ? user.medicoId : db.medicos[0].id };
+};
+
+const renderAgenda = (host) => {
+  const user = state.user;
+  const soloPropio = user && user.grupo === "Medicos";
+  const medicosList = soloPropio ? db.medicos.filter((m) => m.id === user.medicoId) : db.medicos;
+  const inicio = defaultAgenda();
+  const mark = can("marcar_completadas");
+  host.innerHTML = `
+    <div class="panel-head"><div class="stack-xs"><h2 class="h3">Agenda diaria por medico</h2><p class="text-muted">Selecciona medico y fecha. Accion masiva: marcar citas como completadas.</p></div>${pill("Operativo", "green")}</div>
+    <div class="form-grid">
+      <div class="field"><label for="agenda-medico">Medico</label><select id="agenda-medico">${medicosList.map((m) => `<option value="${m.id}"${m.id === inicio.medicoId ? " selected" : ""}>${esc(fullName(m))} - ${esc(m.especialidad)}</option>`).join("")}</select></div>
+      <div class="field"><label for="agenda-fecha">Fecha</label><input id="agenda-fecha" type="date" value="${inicio.fecha}"></div>
+    </div>
+    <div id="agenda-tabla"></div>
+    ${mark ? `<div class="form-actions"><button class="btn btn-primary" type="button" id="agenda-marcar">Marcar citas como completadas</button><span class="text-caption" id="agenda-contador"></span></div>` : ""}`;
+  const medicoSel = $("#agenda-medico", host);
+  const fechaSel = $("#agenda-fecha", host);
+  const refresh = () => {
+    const list = db.citas.filter((c) => c.medicoId === Number(medicoSel.value) && c.fecha === fechaSel.value).sort((a, b) => a.hora.localeCompare(b.hora));
+    $("#agenda-tabla", host).innerHTML = `<div class="table-wrap"><table class="data-table">
+      <thead><tr>${mark ? "<th>Sel.</th>" : ""}<th>Hora</th><th>Paciente</th><th>DNI</th><th>Edad</th><th>Estado</th><th>Motivo</th></tr></thead>
+      <tbody>${list.length === 0 ? `<tr><td colspan="7" class="empty-state">Sin citas para este medico en la fecha elegida.</td></tr>` : list.map((c) => {
+        const p = byId(db.pacientes, c.pacienteId);
+        const box = mark ? `<td>${c.estado === "pendiente" ? `<input type="checkbox" data-pick="${c.id}" aria-label="Seleccionar cita ${c.id}">` : ""}</td>` : "";
+        return `<tr>${box}<td>${esc(c.hora)}</td><td>${esc(fullName(p))}</td><td>${esc(p.dni)}</td><td>${ageOf(p.nacimiento)}</td><td>${estadoPill(c.estado)}</td><td class="wrap">${esc(c.motivo)}</td></tr>`;
+      }).join("")}</tbody></table></div>`;
+    const counter = $("#agenda-contador", host);
+    if (counter) {
+      counter.textContent = `${list.length} citas en la agenda, ${list.filter((c) => c.estado === "pendiente").length} pendientes.`;
+    }
+  };
+  medicoSel.addEventListener("change", refresh);
+  fechaSel.addEventListener("change", refresh);
+  refresh();
+  const button = $("#agenda-marcar", host);
+  if (button) {
+    button.addEventListener("click", () => {
+      const ids = $$("[data-pick]:checked", host).map((box) => Number(box.dataset.pick));
+      if (ids.length === 0) {
+        toast("Selecciona al menos una cita pendiente.", "error");
+        return;
+      }
+      const res = dispatch({ kind: "action", name: "marcar_completadas", perm: "marcar_completadas", data: { ids } });
+      if (!res.ok) {
+        toast(res.reason, "error");
+        return;
+      }
+      ids.forEach((id) => {
+        byId(db.citas, id).estado = "completada";
+      });
+      saveDb();
+      toast(`${ids.length} citas marcadas como completadas.`);
+      refresh();
+    });
+  }
+};
