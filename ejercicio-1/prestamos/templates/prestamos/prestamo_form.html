@@ -1,0 +1,33 @@
+{% extends "prestamos/base.html" %}
+
+{% block title %}Solicitar Prestamo - UNCP{% endblock %}
+
+{% block content %}
+  <section class="section-compact">
+    <div class="container stack-md">
+      <div class="stack-xs">
+        <span class="pill pill-green">RF2 - Validacion Avanzada</span>
+        <h1 class="h2">Solicitud de Prestamo</h1>
+        <p class="text-muted">Lorem ipsum dolor sit amet, consectetur adipiscing elit. Reglas activas: max. 3 activos por docente, fecha posterior, equipo operativo y control de stock.</p>
+      </div>
+
+      <form class="card stack-sm" method="post" id="solicitud-prestamo-form">
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        <div class="grid-2">
+          {% for field in form %}
+            <div class="field-group {% if field.name == 'observaciones' %}full-span{% endif %}">
+              <label class="field-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+              {{ field.errors }}
+            </div>
+          {% endfor %}
+        </div>
+        <div class="flex-wrap items-center">
+          <button class="btn btn-primary" type="submit">Confirmar prestamo</button>
+          <a class="btn btn-surface" href="{% url 'prestamos:catalogo' %}">Cancelar</a>
+        </div>
+      </form>
+    </div>
+  </section>
+{% endblock %}

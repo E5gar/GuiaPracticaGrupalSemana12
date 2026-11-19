@@ -1,0 +1,168 @@
+{% extends "prestamos/base.html" %}
+
+{% block title %}Catalogo de Equipos - UNCP{% endblock %}
+
+{% block content %}
+  <section class="hero-scene" data-hero-scene>
+    <div class="hero-sticky">
+      <img class="hero-float hero-float-1" src="https://picsum.photos/seed/uncp-laptop-lab/480/340" alt="Laptop de laboratorio UNCP" loading="lazy">
+      <img class="hero-float hero-float-2" src="https://picsum.photos/seed/uncp-arduino-kit/440/380" alt="Kit de Arduino UNCP" loading="lazy">
+      <img class="hero-float hero-float-3" src="https://picsum.photos/seed/uncp-router-switch/460/320" alt="Equipos de red UNCP" loading="lazy">
+
+      <div class="hero-center">
+        <div class="hero-logo flex-wrap items-center">
+          <span class="pill pill-blue">Caso 1 - IS093A</span>
+          <span class="pill pill-green">5 Laboratorios - 150+ Dispositivos</span>
+        </div>
+
+        <h1 class="display hero-words" aria-label="Sistema de Gestion de Prestamos de Equipos">
+          <span class="hero-word">Sistema</span>
+          <span class="hero-word">de</span>
+          <span class="hero-word">Gestion</span>
+          <span class="hero-word">de</span>
+          <span class="hero-word">Prestamos</span>
+          <span class="hero-word">de</span>
+          <span class="hero-word">Equipos</span>
+        </h1>
+
+        <p class="h4 text-muted hero-subtitle">
+            5 laboratorios de la FIS UNCP
+        </p>
+
+        <div class="flex-wrap items-center justify-center">
+          <a class="btn btn-primary" href="#catalogo-equipos">Ver Catalogo</a>
+          {% if user.is_authenticated %}
+            <a class="btn btn-surface" href="{% url 'prestamos:solicitar_prestamo' %}">Solicitar Prestamo</a>
+          {% else %}
+            <a class="btn btn-surface" href="{% url 'prestamos:login' %}">Iniciar Sesion</a>
+          {% endif %}
+          <button class="widget-copy" type="button" data-copy="UNCP-FIS-LAB-2026" aria-label="Copiar codigo institucional">
+            <span class="widget-copy-icon" aria-hidden="true">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="3"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+            </span>
+            <span class="widget-copy-label">UNCP-FIS-LAB-2026</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section-compact" id="catalogo-equipos">
+    <div class="container stack-md">
+      <div class="flex-wrap items-center justify-between">
+        <div class="stack-xs">
+          <span class="pill pill-blue">RF1 - Catalogo Institucional</span>
+          <h2 class="h2">Equipos de Laboratorio</h2>
+          <p class="text-muted">Lorem ipsum dolor sit amet, consectetur adipiscing elit. Consulta de disponibilidad en tiempo real.</p>
+        </div>
+        {% if user.is_authenticated %}
+          <div class="flex-wrap items-center">
+            <a class="btn btn-surface" href="{% url 'prestamos:mis_prestamos' %}">Ver Prestamos</a>
+            {% if user.rol == 'admin' or user.is_superuser %}
+              <button class="btn btn-primary" type="button" id="toggle-equipo-form">Registrar Equipo</button>
+            {% endif %}
+          </div>
+        {% endif %}
+      </div>
+
+      {% if user.is_authenticated and user.rol == 'admin' or user.is_superuser %}
+        <form class="card stack-sm" method="post" id="nuevo-equipo-card" {% if not equipo_form.errors %}hidden{% endif %}>
+          {% csrf_token %}
+          <h3 class="h4">Nuevo Equipo (Solo Administrador)</h3>
+          {{ equipo_form.non_field_errors }}
+          <div class="grid-3">
+            {% for field in equipo_form %}
+              <div class="field-group">
+                <label class="field-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {{ field.errors }}
+              </div>
+            {% endfor %}
+          </div>
+          <div class="flex-wrap items-center">
+            <button class="btn btn-primary" type="submit">Guardar equipo</button>
+          </div>
+        </form>
+      {% endif %}
+
+      <form class="card filter-bar" method="get">
+        <div class="field-group">
+          <label class="field-label" for="id-q">Buscar codigo, nombre o categoria</label>
+          <input class="field-input" type="search" id="id-q" name="q" value="{{ q }}" placeholder="UNCP-FIS-001, Laptop, Arduino...">
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="id-lab">Laboratorio</label>
+          <select class="field-select" id="id-lab" name="laboratorio">
+            <option value="">Todos los laboratorios</option>
+            {% for lab in laboratorios %}
+              <option value="{{ lab.id }}" {% if lab_id == lab.id|stringformat:'s' %}selected{% endif %}>{{ lab.nombre }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="id-estado">Estado</label>
+          <select class="field-select" id="id-estado" name="estado">
+            <option value="">Todos los estados</option>
+            <option value="operativo" {% if estado_filtro == 'operativo' %}selected{% endif %}>Operativo</option>
+            <option value="mantenimiento" {% if estado_filtro == 'mantenimiento' %}selected{% endif %}>En mantenimiento</option>
+            <option value="baja" {% if estado_filtro == 'baja' %}selected{% endif %}>Dado de baja</option>
+          </select>
+        </div>
+        <div class="field-actions">
+          <button class="btn btn-primary" type="submit">Filtrar</button>
+          <a class="btn btn-surface" href="{% url 'prestamos:catalogo' %}">Limpiar</a>
+        </div>
+      </form>
+
+      <div class="gallery-masonry">
+        {% for eq in equipos %}
+          <article class="gallery-card">
+            <div class="gallery-card-media-wrap">
+              {% if eq.imagen_url %}
+                <img class="gallery-media" src="{{ eq.imagen_url }}" alt="{{ eq.nombre }}" loading="lazy">
+              {% else %}
+                <img class="gallery-media" src="https://picsum.photos/seed/uncp-default/640/450" alt="{{ eq.nombre }}" loading="lazy">
+              {% endif %}
+
+              <div class="gallery-toolbar">
+                {% if user.is_authenticated and user.rol != 'invitado' %}
+                  <a class="btn btn-surface btn-sm" href="{% url 'prestamos:solicitar_prestamo' %}?equipo={{ eq.pk }}">Solicitar</a>
+                {% else %}
+                  <span class="text-caption">Solo lectura</span>
+                {% endif %}
+
+                {% if user.is_authenticated and user.rol == 'admin' or user.is_superuser %}
+                  <form method="post" action="{% url 'prestamos:equipo_eliminar' eq.pk %}" class="inline-form">
+                    {% csrf_token %}
+                    <button class="btn btn-danger btn-sm" type="submit" data-confirm-delete="Eliminar {{ eq.codigo_patrimonial }}?">Eliminar</button>
+                  </form>
+                {% endif %}
+              </div>
+            </div>
+
+            <div class="gallery-card-body">
+              <div class="gallery-card-meta">
+                <span class="text-caption">{{ eq.codigo_patrimonial }} - {{ eq.categoria }}</span>
+                {% if eq.estado == 'operativo' %}
+                  <span class="pill pill-green">Operativo</span>
+                {% elif eq.estado == 'mantenimiento' %}
+                  <span class="pill pill-amber">Mantenimiento</span>
+                {% else %}
+                  <span class="pill pill-violet">Baja</span>
+                {% endif %}
+              </div>
+              <h3 class="h4">{{ eq.nombre }}</h3>
+              <p class="text-caption">{{ eq.descripcion }}</p>
+              <p class="text-caption">{{ eq.laboratorio.nombre }} | Stock: {{ eq.stock_disponible }}/{{ eq.stock_total }} | Mant.: hace {{ eq.dias_desde_mantenimiento }} dias</p>
+            </div>
+          </article>
+        {% empty %}
+          <p class="text-muted">No hay equipos registrados con los criterios indicados.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+{% endblock %}
