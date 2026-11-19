@@ -1064,3 +1064,45 @@ hooks.boot.push(() => {
     refreshCookieDump();
   }, 1000);
 });
+
+const AUDITED_ACTIONS = ["agendar_cita", "cancelar_cita", "registrar_consulta", "ver_historial", "agregar_nota", "registrar_paciente", "registrar_medico", "marcar_completadas"];
+
+const describeRequest = (req) => {
+  const d = req.data || {};
+  const parts = [];
+  if (d.pacienteId) {
+    const p = byId(db.pacientes, d.pacienteId);
+    parts.push(`paciente_dni=${p ? p.dni : d.pacienteId}`);
+  }
+  if (d.citaId) {
+    parts.push(`cita=${d.citaId}`);
+  }
+  if (d.consultaId) {
+    parts.push(`consulta=${d.consultaId}`);
+  }
+  if (d.fecha && d.hora) {
+    parts.push(`fecha=${d.fecha} hora=${d.hora}`);
+  }
+  if (Array.isArray(d.ids)) {
+    parts.push(`citas=${d.ids.join(",")}`);
+  }
+  if (d.dni) {
+    parts.push(`dni=${d.dni}`);
+  }
+  if (d.cmp) {
+    parts.push(`cmp=${d.cmp}`);
+  }
+  return parts.join(" ");
+};
+
+useMiddleware("auditoria", (req, next) => {
+  const res = next();
+  if (req.kind === "action" && AUDITED_ACTIONS.includes(req.name)) {
+    if (res.ok) {
+      writeLog(req.name === "ver_historial" ? "SENSIBLE" : "AUDIT", req.name, describeRequest(req));
+    } else {
+      writeLog("WARNING", `${req.name}_rechazado`, `motivo=${res.reason}`);
+    }
+  }
+  return res;
+});
