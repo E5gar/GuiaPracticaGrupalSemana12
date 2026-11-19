@@ -731,3 +731,36 @@ can = (perm) => {
   }
   return PERMS[state.user.grupo].includes(perm);
 };
+
+const nombreUsuario = () => {
+  const emp = miEmpleado();
+  return emp ? `${emp.nombres} ${emp.apellidos}` : state.user.username;
+};
+
+const writeLog = (level, action, detail) => {
+  const entry = { ts: stamp(), level, user: state.user ? state.user.username : "anonimo", action, detail: detail || "" };
+  db.logs.push(entry);
+  if (db.logs.length > 300) {
+    db.logs.shift();
+  }
+  saveDb();
+  const output = level === "WARNING" ? console.warn : console.log;
+  output(`[${entry.level}] ${entry.ts} usuario=${entry.user} accion=${entry.action} ${entry.detail}`);
+  return entry;
+};
+
+useMiddleware("sesion", (req, next) => {
+  if (req.perm && !req.user) {
+    writeLog("WARNING", "acceso_sin_sesion", `destino=${req.name}`);
+    return { ok: false, status: 401, reason: "Debes iniciar sesion para acceder a este recurso." };
+  }
+  return next();
+});
+
+useMiddleware("autorizacion", (req, next) => {
+  if (req.perm && req.perm !== "auth" && !can(req.perm)) {
+    writeLog("WARNING", "acceso_no_autorizado", `destino=${req.name} permiso=${req.perm}`);
+    return { ok: false, status: 403, reason: `Tu grupo (${req.user.grupo}) no tiene el permiso ${req.perm}.` };
+  }
+  return next();
+});
