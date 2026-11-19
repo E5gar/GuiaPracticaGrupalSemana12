@@ -445,3 +445,328 @@ document.addEventListener("DOMContentLoaded", () => {
   hooks.boot.forEach((fn) => fn());
   renderApp();
 });
+
+const stamp = () => {
+  const d = new Date();
+  return `${isoDate(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+};
+
+const visibleCitas = () => {
+  const user = state.user;
+  if (user && user.grupo === "Pacientes") {
+    return db.citas.filter((c) => c.pacienteId === user.pacienteId);
+  }
+  if (user && user.grupo === "Medicos") {
+    return db.citas.filter((c) => c.medicoId === user.medicoId);
+  }
+  return db.citas;
+};
+
+const canCancel = (cita) => {
+  if (cita.estado !== "pendiente" || !can("cancelar_cita")) {
+    return false;
+  }
+  const user = state.user;
+  if (user && user.grupo === "Pacientes") {
+    return cita.pacienteId === user.pacienteId;
+  }
+  return true;
+};
+
+const validateCita = (d) => {
+  const errors = {};
+  const medico = byId(db.medicos, d.medico);
+  const nowTime = `${pad(new Date().getHours())}:${pad(new Date().getMinutes())}`;
+  if (!d.paciente) {
+    errors.paciente = "Selecciona un paciente.";
+  }
+  if (!d.especialidad) {
+    errors.especialidad = "Selecciona una especialidad.";
+  }
+  if (!medico) {
+    errors.medico = "Selecciona un medico.";
+  } else if (medico.especialidad !== d.especialidad) {
+    errors.medico = "El medico no pertenece a la especialidad elegida.";
+  }
+  if (!d.fecha) {
+    errors.fecha = "Selecciona la fecha de la cita.";
+  } else if (d.fecha < todayIso()) {
+    errors.fecha = "No se puede agendar una cita en una fecha pasada.";
+  }
+  if (!d.hora) {
+    errors.hora = "Selecciona la hora de la cita.";
+  } else if (d.fecha === todayIso() && d.hora <= nowTime) {
+    errors.hora = "La hora seleccionada ya paso.";
+  }
+  const motivo = sanitize(d.motivo);
+  if (motivo.length < 20) {
+    errors.motivo = `El motivo de consulta debe tener al menos 20 caracteres (actual: ${motivo.length}).`;
+  }
+  if (!errors.fecha && d.paciente) {
+    const dup = db.citas.find((c) => c.estado !== "cancelada" && c.pacienteId === Number(d.paciente) && c.fecha === d.fecha);
+    if (dup) {
+      errors.fecha = `El paciente ya tiene una cita ese dia a las ${dup.hora}. No se permiten dos citas el mismo dia.`;
+    }
+  }
+  if (!errors.fecha && !errors.hora && medico) {
+    const clash = db.citas.find((c) => c.estado !== "cancelada" && c.medicoId === medico.id && c.fecha === d.fecha && Math.abs(toMin(c.hora) - toMin(d.hora)) < 30);
+    if (clash) {
+      errors.hora = `El medico ya tiene una cita a las ${clash.hora} (30 minutos por cita). El horario se superpone.`;
+    }
+  }
+  return errors;
+};
+
+const citasTable = (list, withActions) => `
+  <div class="table-wrap"><table class="data-table">
+    <thead><tr><th>Fecha</th><th>Hora</th><th>Paciente</th><th>Medico</th><th>Estado</th><th>Motivo</th>${withActions ? "<th>Accion</th>" : ""}</tr></thead>
+    <tbody>${list.length === 0 ? `<tr><td colspan="7" class="empty-state">No hay citas para mostrar.</td></tr>` : list.map((c) => {
+      const p = byId(db.pacientes, c.pacienteId);
+      const m = byId(db.medicos, c.medicoId);
+      const action = withActions ? `<td>${canCancel(c) ? `<button class="btn btn-surface btn-small" type="button" data-cancel="${c.id}">Cancelar</button>` : ""}</td>` : "";
+      return `<tr><td>${esc(c.fecha)}</td><td>${esc(c.hora)}</td><td>${esc(fullName(p))}</td><td>${esc(m.apellidos.split(" ")[0])} - ${esc(m.especialidad)}</td><td>${estadoPill(c.estado)}</td><td class="wrap">${esc(c.motivo)}</td>${action}</tr>`;
+    }).join("")}</tbody>
+  </table></div>`;
+
+const renderCitas = (host) => {
+  const user = state.user;
+  const soloPropio = user && user.grupo === "Pacientes";
+  const pacientesOptions = soloPropio
+    ? optionsFrom(db.pacientes.filter((p) => p.id === user.pacienteId), (p) => `${p.dni} - ${fullName(p)}`)
+    : optionsFrom(db.pacientes, (p) => `${p.dni} - ${fullName(p)}`, "Selecciona un paciente");
+  const fields = [
+    { id: "paciente", label: "Paciente", type: "select", options: pacientesOptions },
+    { id: "especialidad", label: "Especialidad", type: "select", options: [{ value: "", label: "Selecciona una especialidad" }, ...ESPECIALIDADES.map((e) => ({ value: e, label: e }))] },
+    { id: "medico", label: "Medico", type: "select", options: [{ value: "", label: "Primero elige la especialidad" }] },
+    { id: "fecha", label: "Fecha", type: "date", attrs: `min="${todayIso()}"` },
+    { id: "hora", label: "Hora", type: "time", attrs: 'step="1800"', hint: "Cada cita dura 30 minutos." },
+    { id: "motivo", label: "Motivo de consulta", type: "textarea", wide: true, placeholder: "Describe el motivo (minimo 20 caracteres)" }
+  ];
+  const formBlock = can("agendar_cita")
+    ? `<form id="form-cita" class="stack-md" novalidate>
+        <div class="form-grid">${fields.map(fieldHtml).join("")}</div>
+        <div class="form-actions"><button class="btn btn-primary" type="submit">Agendar cita</button><button class="btn btn-surface" type="reset">Limpiar</button></div>
+      </form>`
+    : `<p class="text-muted">Tu rol no tiene el permiso agendar_cita. Solo puedes consultar y cancelar citas.</p>`;
+  host.innerHTML = `
+    <div class="panel stack-md">
+      <div class="panel-head"><div class="stack-xs"><h2 class="h3">Agendamiento de citas</h2><p class="text-muted">Validaciones cruzadas de paciente, medico y horario.</p></div>${pill("Formulario complejo", "violet")}</div>
+      ${formBlock}
+    </div>
+    <div class="panel stack-md">
+      <div class="panel-head">
+        <h2 class="h3">Citas registradas</h2>
+        <div class="field"><label class="sr-only" for="filtro-estado">Filtrar por estado</label>
+          <select id="filtro-estado"><option value="">Todos los estados</option><option value="pendiente">Pendientes</option><option value="completada">Completadas</option><option value="cancelada">Canceladas</option></select>
+        </div>
+      </div>
+      <div id="lista-citas"></div>
+    </div>`;
+
+  const refresh = () => {
+    const estado = $("#filtro-estado", host).value;
+    const all = visibleCitas().filter((c) => !estado || c.estado === estado).sort((a, b) => `${b.fecha}${b.hora}`.localeCompare(`${a.fecha}${a.hora}`));
+    const shown = all.slice(0, 12);
+    $("#lista-citas", host).innerHTML = `${citasTable(shown, true)}<p class="text-caption">Mostrando ${shown.length} de ${all.length} citas.</p>`;
+    $$("[data-cancel]", host).forEach((button) => button.addEventListener("click", () => {
+      const res = dispatch({ kind: "action", name: "cancelar_cita", perm: "cancelar_cita", data: { citaId: Number(button.dataset.cancel) } });
+      if (!res.ok) {
+        toast(res.reason, "error");
+        return;
+      }
+      byId(db.citas, button.dataset.cancel).estado = "cancelada";
+      saveDb();
+      toast("La cita fue cancelada.");
+      refresh();
+    }));
+  };
+  $("#filtro-estado", host).addEventListener("change", refresh);
+  refresh();
+
+  const form = $("#form-cita", host);
+  if (!form) {
+    return;
+  }
+  const especialidad = $("#especialidad", form);
+  const medico = $("#medico", form);
+  especialidad.addEventListener("change", () => {
+    const list = db.medicos.filter((m) => m.especialidad === especialidad.value);
+    const options = especialidad.value ? [{ value: "", label: "Selecciona un medico" }, ...list.map((m) => ({ value: m.id, label: `${fullName(m)} - ${m.consultorio}` }))] : [{ value: "", label: "Primero elige la especialidad" }];
+    medico.innerHTML = options.map((o) => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join("");
+  });
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const data = readForm(form);
+    data.motivo = sanitize(data.motivo);
+    const errors = validateCita(data);
+    setErrors(form, errors);
+    if (Object.keys(errors).length > 0) {
+      toast("La cita no cumple las validaciones. Revisa los campos.", "error");
+      return;
+    }
+    const res = dispatch({ kind: "action", name: "agendar_cita", perm: "agendar_cita", data });
+    if (!res.ok) {
+      setErrors(form, { hora: res.reason });
+      toast(res.reason, "error");
+      return;
+    }
+    db.citas.push({ id: nextId(db.citas), pacienteId: Number(data.paciente), medicoId: Number(data.medico), fecha: data.fecha, hora: data.hora, motivo: data.motivo, estado: "pendiente" });
+    saveDb();
+    form.reset();
+    medico.innerHTML = `<option value="">Primero elige la especialidad</option>`;
+    toast("Cita agendada correctamente.");
+    refresh();
+  });
+};
+
+const citasPendientesDeConsulta = () => {
+  const user = state.user;
+  return db.citas.filter((c) => c.estado !== "cancelada" && !db.consultas.some((k) => k.citaId === c.id) && (!user || user.grupo !== "Medicos" || c.medicoId === user.medicoId));
+};
+
+const renderConsulta = (host) => {
+  const pendientes = citasPendientesDeConsulta().sort((a, b) => `${b.fecha}${b.hora}`.localeCompare(`${a.fecha}${a.hora}`));
+  const options = optionsFrom(pendientes, (c) => `#${c.id} - ${c.fecha} ${c.hora} - ${fullName(byId(db.pacientes, c.pacienteId))}`, "Selecciona la cita atendida");
+  const fields = [
+    { id: "cita", label: "Cita atendida", type: "select", options, wide: true },
+    { id: "diagnostico", label: "Diagnostico", type: "textarea", rows: 2 },
+    { id: "tratamiento", label: "Tratamiento", type: "textarea", rows: 2 },
+    { id: "medicamentos", label: "Medicamentos recetados", placeholder: "Ejemplo: Paracetamol 500 mg cada 8 horas" },
+    { id: "control", label: "Proxima cita de control (opcional)", type: "date" },
+    { id: "adjuntos", label: "Archivos adjuntos (simulado)", placeholder: "Describe la receta o examen adjunto", wide: true }
+  ];
+  host.innerHTML = `
+    <div class="panel stack-md">
+      <div class="panel-head"><div class="stack-xs"><h2 class="h3">Registro de consulta medica</h2><p class="text-muted">Una consulta registrada no se puede modificar. Solo se pueden agregar notas desde el historial clinico.</p></div>${pill("Post-atencion", "green")}</div>
+      <form id="form-consulta" class="stack-md" novalidate>
+        <div class="form-grid">${fields.map(fieldHtml).join("")}</div>
+        <div class="form-actions"><button class="btn btn-primary" type="submit">Registrar consulta</button><button class="btn btn-surface" type="reset">Limpiar</button></div>
+      </form>
+    </div>`;
+  const form = $("#form-consulta", host);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const data = readForm(form);
+    const cita = byId(db.citas, data.cita);
+    const errors = {};
+    if (!cita) {
+      errors.cita = "Selecciona la cita atendida.";
+    }
+    if (sanitize(data.diagnostico).length < 10) {
+      errors.diagnostico = "El diagnostico debe tener al menos 10 caracteres.";
+    }
+    if (sanitize(data.tratamiento).length < 10) {
+      errors.tratamiento = "El tratamiento debe tener al menos 10 caracteres.";
+    }
+    if (sanitize(data.medicamentos).length < 3) {
+      errors.medicamentos = "Indica los medicamentos recetados o escribe: Sin medicamentos.";
+    }
+    if (data.control && cita && data.control <= cita.fecha) {
+      errors.control = "La proxima cita de control debe ser posterior a la fecha de la consulta.";
+    }
+    setErrors(form, errors);
+    if (Object.keys(errors).length > 0) {
+      toast("Corrige los campos marcados antes de registrar.", "error");
+      return;
+    }
+    const res = dispatch({ kind: "action", name: "registrar_consulta", perm: "registrar_consulta", data: { citaId: cita.id, pacienteId: cita.pacienteId } });
+    if (!res.ok) {
+      toast(res.reason, "error");
+      return;
+    }
+    db.consultas.push({ id: nextId(db.consultas), citaId: cita.id, pacienteId: cita.pacienteId, medicoId: cita.medicoId, fecha: cita.fecha, diagnostico: sanitize(data.diagnostico), tratamiento: sanitize(data.tratamiento), medicamentos: sanitize(data.medicamentos), control: data.control, adjuntos: sanitize(data.adjuntos), notas: [] });
+    cita.estado = "completada";
+    saveDb();
+    toast("Consulta registrada. El registro es inmutable.");
+    renderConsulta(host);
+  });
+};
+
+const consultaCard = (k) => {
+  const m = byId(db.medicos, k.medicoId);
+  const notas = k.notas.length === 0 ? `<p class="text-caption">Sin notas adicionales.</p>` : k.notas.map((n) => `<p class="text-caption"><strong>${esc(n.autor)}</strong> (${esc(n.ts)}): ${esc(n.texto)}</p>`).join("");
+  const noteForm = can("registrar_consulta")
+    ? `<form class="form-actions" data-note-form="${k.id}"><div class="field" style="flex: 1 1 14rem;"><label class="sr-only" for="nota-${k.id}">Nueva nota</label><input id="nota-${k.id}" name="nota" placeholder="Agregar nota (no modifica la consulta)" autocomplete="off"></div><button class="btn btn-surface btn-small" type="submit">Agregar nota</button></form>`
+    : "";
+  return `
+    <div class="panel stack-sm">
+      <div class="panel-head"><h3 class="h4">Consulta del ${esc(k.fecha)}</h3>${pill(`${m.especialidad} - ${m.apellidos.split(" ")[0]}`, "blue")}</div>
+      <p><strong>Diagnostico:</strong> ${esc(k.diagnostico)}</p>
+      <p><strong>Tratamiento:</strong> ${esc(k.tratamiento)}</p>
+      <p><strong>Medicamentos:</strong> ${esc(k.medicamentos)}</p>
+      ${k.control ? `<p><strong>Control programado:</strong> ${esc(k.control)}</p>` : ""}
+      ${k.adjuntos ? `<p><strong>Adjunto simulado:</strong> ${esc(k.adjuntos)}</p>` : ""}
+      <div class="stack-xs">${notas}</div>
+      ${noteForm}
+    </div>`;
+};
+
+const renderHistorial = (host) => {
+  const user = state.user;
+  const soloPropio = user && user.grupo === "Pacientes";
+  const lista = soloPropio ? db.pacientes.filter((p) => p.id === user.pacienteId) : db.pacientes;
+  host.innerHTML = `
+    <div class="panel stack-md">
+      <div class="panel-head"><div class="stack-xs"><h2 class="h3">Historial clinico electronico</h2><p class="text-muted">Cada acceso a un historial queda registrado para auditoria.</p></div>${pill("Confidencial", "amber")}</div>
+      <form id="form-historial" class="form-actions" novalidate>
+        <div class="field" style="flex: 1 1 18rem;"><label for="hpaciente">Paciente</label>
+          <select id="hpaciente" name="hpaciente">${optionsFrom(lista, (p) => `${p.dni} - ${fullName(p)}`, soloPropio ? "" : "Selecciona un paciente").map((o) => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join("")}</select>
+        </div>
+        <button class="btn btn-primary" type="submit">Abrir historial</button>
+      </form>
+      <div id="historial-detalle" class="stack-md"></div>
+    </div>`;
+  const form = $("#form-historial", host);
+  const detalle = $("#historial-detalle", host);
+  const open = () => {
+    const paciente = byId(db.pacientes, $("#hpaciente", form).value);
+    if (!paciente) {
+      toast("Selecciona un paciente para abrir su historial.", "error");
+      return;
+    }
+    const res = dispatch({ kind: "action", name: "ver_historial", perm: "ver_historial_clinico", data: { pacienteId: paciente.id } });
+    if (!res.ok) {
+      detalle.innerHTML = "";
+      toast(res.reason, "error");
+      return;
+    }
+    const consultas = db.consultas.filter((k) => k.pacienteId === paciente.id).sort((a, b) => b.fecha.localeCompare(a.fecha));
+    detalle.innerHTML = `
+      <div class="stat-row">
+        <div class="stat"><span class="text-caption">Paciente</span><strong>${esc(fullName(paciente))}</strong></div>
+        <div class="stat"><span class="text-caption">Edad</span><strong>${ageOf(paciente.nacimiento)} anios</strong></div>
+        <div class="stat"><span class="text-caption">Tipo</span><strong>${esc(paciente.tipo)}</strong></div>
+        <div class="stat"><span class="text-caption">Alergias</span><strong>${esc(paciente.alergias)}</strong></div>
+      </div>
+      ${consultas.length === 0 ? `<p class="empty-state">Este paciente aun no tiene consultas registradas.</p>` : consultas.map(consultaCard).join("")}`;
+    $$("[data-note-form]", detalle).forEach((noteForm) => noteForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const consulta = byId(db.consultas, noteForm.dataset.noteForm);
+      const texto = sanitize(new FormData(noteForm).get("nota"));
+      if (texto.length < 5) {
+        toast("La nota debe tener al menos 5 caracteres.", "error");
+        return;
+      }
+      const resNote = dispatch({ kind: "action", name: "agregar_nota", perm: "registrar_consulta", data: { consultaId: consulta.id, pacienteId: paciente.id } });
+      if (!resNote.ok) {
+        toast(resNote.reason, "error");
+        return;
+      }
+      consulta.notas.push({ autor: state.user ? state.user.username : "sistema", ts: stamp(), texto });
+      saveDb();
+      toast("Nota agregada. La consulta original no fue modificada.");
+      open();
+    }));
+  };
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    open();
+  });
+  if (soloPropio) {
+    open();
+  }
+};
+
+registerView({ id: "citas", title: "Citas", order: 40, perm: "auth", render: renderCitas });
+registerView({ id: "consulta", title: "Consulta", order: 50, perm: "registrar_consulta", render: renderConsulta });
+registerView({ id: "historial", title: "Historial", order: 60, perm: "ver_historial_clinico", render: renderHistorial });
