@@ -1241,3 +1241,45 @@ const renderReportes = (host) => {
     toast("Texto de exportacion generado.");
   });
 };
+
+const renderRrhh = (host) => {
+  const render = () => {
+    const pendientes = db.permisos.filter((p) => p.estado === "pendiente");
+    host.innerHTML = `
+      <div class="panel stack-md">
+        <div class="panel-head"><div class="stack-xs"><h2 class="h3">Permisos pendientes de aprobacion</h2><p class="text-muted">Accion masiva: aprobar permisos seleccionados.</p></div>${pill(`${pendientes.length} pendientes`, "amber")}</div>
+        <div class="table-wrap"><table class="data-table">
+          <thead><tr><th>Sel.</th><th>Empleado</th><th>Area</th><th>Tipo</th><th>Inicio</th><th>Fin</th><th>Dias</th><th>Motivo</th></tr></thead>
+          <tbody>${pendientes.length === 0 ? `<tr><td colspan="8" class="empty-state">No hay permisos pendientes.</td></tr>` : pendientes.map((p) => {
+            const e = byId(db.empleados, p.empleadoId);
+            return `<tr><td><input type="checkbox" data-pick="${p.id}" aria-label="Seleccionar permiso ${p.id}"></td><td>${esc(fullName(e))}</td><td>${esc(areaName(e.areaId))}</td><td>${esc(p.tipo)}</td><td>${esc(p.inicio)}</td><td>${esc(p.fin)}</td><td>${diasDe(p)}</td><td class="wrap">${esc(p.motivo)}</td></tr>`;
+          }).join("")}</tbody>
+        </table></div>
+        <div class="form-actions"><button class="btn btn-primary" type="button" id="aprobar-masivo">Aprobar permisos seleccionados</button></div>
+      </div>
+      <div class="panel stack-md">
+        <div class="panel-head"><div class="stack-xs"><h2 class="h3">Vacaciones por empleado</h2><p class="text-muted">Dias disponibles = 30 dias - dias tomados (aprobados).</p></div></div>
+        <div class="table-wrap"><table class="data-table">
+          <thead><tr><th>Empleado</th><th>Area</th><th>Antiguedad</th><th>Dias tomados</th><th>Dias disponibles</th></tr></thead>
+          <tbody>${db.empleados.map((e) => `<tr><td>${esc(fullName(e))}</td><td>${esc(areaName(e.areaId))}</td><td>${esc(antiguedad(e.ingreso))}</td><td>${vacacionesTomadas(e.id, false)}</td><td>${pill(`${vacacionesDisponibles(e.id)} dias`, vacacionesDisponibles(e.id) > 10 ? "green" : "amber")}</td></tr>`).join("")}</tbody>
+        </table></div>
+      </div>`;
+    $("#aprobar-masivo", host).addEventListener("click", () => {
+      const ids = $$("[data-pick]:checked", host).map((box) => Number(box.dataset.pick));
+      if (ids.length === 0) {
+        toast("Selecciona al menos un permiso pendiente.", "error");
+        return;
+      }
+      const res = dispatch({ kind: "action", name: "aprobar_masivo", perm: "gestion_rrhh", data: { ids } });
+      if (!res.ok) {
+        toast(res.reason, "error");
+        return;
+      }
+      ids.forEach((id) => resolvePermiso(byId(db.permisos, id), "aprobado"));
+      saveDb();
+      toast(`${ids.length} permisos aprobados y notificados.`);
+      render();
+    });
+  };
+  render();
+};
