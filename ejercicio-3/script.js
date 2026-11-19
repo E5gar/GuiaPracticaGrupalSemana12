@@ -420,3 +420,23 @@ document.addEventListener("DOMContentLoaded", () => {
   hooks.boot.forEach((fn) => fn());
   renderApp();
 });
+
+const permisoPill = (estado) => pill(estado, estado === "aprobado" ? "green" : estado === "rechazado" ? "violet" : "amber");
+const diasDe = (p) => daysBetween(p.inicio, p.fin) + 1;
+const vacacionesTomadas = (empleadoId, withPending) => db.permisos.filter((p) => p.empleadoId === empleadoId && p.tipo === "vacaciones" && (p.estado === "aprobado" || (withPending && p.estado === "pendiente"))).reduce((sum, p) => sum + diasDe(p), 0);
+const vacacionesDisponibles = (empleadoId) => 30 - vacacionesTomadas(empleadoId, false);
+
+const actorSelectHtml = () => (state.user ? "" : `<div class="field"><label for="actor">Empleado (simulacion sin sesion)</label><select id="actor">${db.empleados.filter((e) => e.activo).map((e) => `<option value="${e.id}">${esc(fullName(e))} - ${esc(areaName(e.areaId))}</option>`).join("")}</select></div>`);
+const actorId = (host) => {
+  if (state.user) {
+    return state.user.empleadoId;
+  }
+  const select = $("#actor", host);
+  return select ? Number(select.value) : null;
+};
+
+const asistenciaTable = (list, withEmpleado) => `
+  <div class="table-wrap"><table class="data-table">
+    <thead><tr><th>Fecha</th>${withEmpleado ? "<th>Empleado</th>" : ""}<th>Entrada</th><th>Salida</th><th>Horas</th><th>Horas extra</th><th>Origen</th></tr></thead>
+    <tbody>${list.length === 0 ? `<tr><td colspan="7" class="empty-state">Sin registros de asistencia.</td></tr>` : list.map((a) => `<tr><td>${esc(a.fecha)}</td>${withEmpleado ? `<td>${esc(fullName(byId(db.empleados, a.empleadoId)))}</td>` : ""}<td>${esc(a.entrada)}</td><td>${a.salida ? esc(a.salida) : pill("abierta", "amber")}</td><td>${a.salida ? calcHoras(a).toFixed(2) : "-"}</td><td>${calcExtras(a) > 0 ? pill(`+${calcExtras(a).toFixed(2)} h`, "violet") : "0.00"}</td><td>${a.corregido ? pill("corregido RRHH", "blue") : "marcacion"}</td></tr>`).join("")}</tbody>
+  </table></div>`;
