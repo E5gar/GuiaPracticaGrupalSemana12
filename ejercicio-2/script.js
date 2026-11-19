@@ -1253,3 +1253,23 @@ const renderAgenda = (host) => {
     });
   }
 };
+
+const renderPacientesAdmin = (host) => {
+  host.innerHTML = `
+    <div class="panel-head"><div class="stack-xs"><h2 class="h3">Lista de pacientes</h2><p class="text-muted">Busqueda por DNI o nombre. Campos calculados: edad y dias desde la ultima consulta.</p></div></div>
+    <div class="field"><label for="buscar-paciente">Buscar por DNI o nombre</label><input id="buscar-paciente" type="search" placeholder="Ejemplo: 71234500 o Garcia" autocomplete="off"></div>
+    <div id="pacientes-tabla"></div>`;
+  const input = $("#buscar-paciente", host);
+  const refresh = () => {
+    const q = sanitize(input.value).toLowerCase();
+    const list = db.pacientes.filter((p) => !q || p.dni.includes(q) || fullName(p).toLowerCase().includes(q) || `${p.nombres} ${p.apellidos}`.toLowerCase().includes(q));
+    $("#pacientes-tabla", host).innerHTML = `<div class="table-wrap"><table class="data-table">
+      <thead><tr><th>DNI</th><th>Paciente</th><th>Tipo</th><th>Edad</th><th>Ultima consulta</th><th>Dias desde ultima consulta</th></tr></thead>
+      <tbody>${list.length === 0 ? `<tr><td colspan="6" class="empty-state">Sin resultados para la busqueda.</td></tr>` : list.map((p) => {
+        const ultima = ultimaConsulta(p.id);
+        return `<tr><td>${esc(p.dni)}</td><td>${esc(fullName(p))}</td><td>${pill(p.tipo, p.tipo === "docente" ? "violet" : "blue")}</td><td>${ageOf(p.nacimiento)}</td><td>${ultima ? esc(ultima) : "Sin consultas"}</td><td>${ultima ? daysBetween(ultima, todayIso()) : "-"}</td></tr>`;
+      }).join("")}</tbody></table></div><p class="text-caption">${list.length} de ${db.pacientes.length} pacientes.</p>`;
+  };
+  input.addEventListener("input", refresh);
+  refresh();
+};
