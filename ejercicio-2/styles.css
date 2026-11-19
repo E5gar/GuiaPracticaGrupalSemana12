@@ -356,3 +356,16 @@
   background: var(--surface-elevated);
   box-shadow: none;
 }
+
+.console {
+  margin: 0;
+  padding: calc(var(--space-unit) * 4);
+  max-height: 18rem;
+  overflow: auto;
+  border-radius: var(--radius-sm);
+  background: #0d0f12;
+  color: #b8f5cf;
+  font-size: var(--text-caption);
+  line-height: 1.7;
+  white-space: pre;
+}
