@@ -1273,3 +1273,25 @@ const renderPacientesAdmin = (host) => {
   input.addEventListener("input", refresh);
   refresh();
 };
+
+const renderEstadisticas = (host) => {
+  const activas = db.citas.filter((c) => c.estado !== "cancelada");
+  const porEsp = ESPECIALIDADES.map((e) => ({ label: e, value: activas.filter((c) => byId(db.medicos, c.medicoId).especialidad === e).length }));
+  const maxEsp = Math.max(...porEsp.map((x) => x.value), 1);
+  const porMedico = db.medicos.map((m) => ({ label: `${fullName(m)} (${m.especialidad})`, value: db.consultas.filter((k) => k.medicoId === m.id).length })).sort((a, b) => b.value - a.value).slice(0, 5);
+  const frecuentes = db.pacientes.map((p) => ({ label: `${fullName(p)} - ${p.dni}`, value: activas.filter((c) => c.pacienteId === p.id).length })).sort((a, b) => b.value - a.value).slice(0, 5);
+  const bars = (list, max) => list.map((x) => `<div class="bar-row"><span class="bar-label">${esc(x.label)}</span><div class="bar-track"><div class="bar-fill" style="--w: ${Math.round((x.value / max) * 100)}%;"></div></div><strong class="bar-value">${x.value}</strong></div>`).join("");
+  host.innerHTML = `
+    <div class="panel-head"><div class="stack-xs"><h2 class="h3">Estadisticas de atencion</h2><p class="text-muted">Disponible solo con el permiso generar_reportes.</p></div>${pill("Reportes", "violet")}</div>
+    <div class="stat-row">
+      <div class="stat"><span class="text-caption">Citas activas</span><strong>${activas.length}</strong></div>
+      <div class="stat"><span class="text-caption">Consultas registradas</span><strong>${db.consultas.length}</strong></div>
+      <div class="stat"><span class="text-caption">Pacientes</span><strong>${db.pacientes.length}</strong></div>
+      <div class="stat"><span class="text-caption">Medicos</span><strong>${db.medicos.length}</strong></div>
+    </div>
+    <div class="grid-2">
+      <div class="stack-sm"><h3 class="h4">Citas por especialidad</h3>${bars(porEsp, maxEsp)}</div>
+      <div class="stack-sm"><h3 class="h4">Medicos con mas consultas</h3>${bars(porMedico, Math.max(porMedico[0].value, 1))}</div>
+    </div>
+    <div class="stack-sm"><h3 class="h4">Pacientes frecuentes</h3>${bars(frecuentes, Math.max(frecuentes[0].value, 1))}</div>`;
+};
