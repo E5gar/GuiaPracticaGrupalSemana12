@@ -46,3 +46,130 @@ const hashPass = (text) => {
   }
   return `h${h.toString(16)}`;
 };
+
+const DB_KEY = "ta_db_v1";
+const CLOCK_KEY = "ta_clock";
+const AREAS = ["Sistemas", "Contabilidad", "Ventas", "Logistica", "RRHH"];
+const DOMINIO = "@tecnoandes.pe";
+
+const hooks = { boot: [], render: [] };
+const state = { user: null, view: "empleados" };
+let can = () => true;
+
+const nowDate = () => {
+  const saved = localStorage.getItem(CLOCK_KEY);
+  return saved ? new Date(saved) : new Date();
+};
+const nowIso = () => isoDate(nowDate());
+const nowHHMM = () => `${pad(nowDate().getHours())}:${pad(nowDate().getMinutes())}`;
+const stamp = () => `${nowIso()} ${nowHHMM()}:${pad(nowDate().getSeconds())}`;
+const isWorkday = (iso) => dayOfWeek(iso) >= 1 && dayOfWeek(iso) <= 5;
+
+const calcHoras = (a) => (a.salida ? Math.round(((toMin(a.salida) - toMin(a.entrada)) / 60) * 100) / 100 : 0);
+const calcExtras = (a) => Math.max(0, Math.round((calcHoras(a) - 8) * 100) / 100);
+
+const seedDb = () => {
+  const areas = AREAS.map((nombre, i) => ({ id: i + 1, nombre, jefeId: [1, 4, 5, 7, 11][i] }));
+  const base = [
+    ["Rosa", "Quispe Lara", "Jefe de Sistemas", 1, "2019-03-04", "planilla", 7800],
+    ["Luis", "Huaman Soto", "Desarrollador", 1, "2022-08-15", "planilla", 4200],
+    ["Marta", "Paredes Rios", "Contador General", 2, "2020-01-13", "planilla", 5200],
+    ["Jorge", "Salazar Ortiz", "Jefe de Contabilidad", 2, "2018-06-01", "planilla", 7200],
+    ["Elena", "Camayo Diaz", "Jefe de Ventas", 3, "2017-09-18", "planilla", 7000],
+    ["Diego", "Rivera Cruz", "Ejecutivo de Ventas", 3, "2023-02-20", "planilla", 3600],
+    ["Patricia", "Ramos Tello", "Jefe de Logistica", 4, "2019-11-11", "planilla", 6800],
+    ["Carlos", "Mendoza Valle", "Almacenero", 4, "2024-01-08", "locacion", 2800],
+    ["Ana", "Garcia Pena", "Analista QA", 1, "2023-07-03", "planilla", 3900],
+    ["Hugo", "Navarro Gil", "Ejecutivo de Ventas", 3, "2024-05-27", "locacion", 3400],
+    ["Sofia", "Torres Lopez", "Gerente de RRHH", 5, "2016-02-01", "planilla", 9500],
+    ["Raul", "Salas Vega", "Asistente de RRHH", 5, "2021-04-19", "planilla", 3000]
+  ];
+  const empleados = base.map((r, i) => ({
+    id: i + 1,
+    dni: String(40125000 + i * 7919),
+    nombres: r[0],
+    apellidos: r[1],
+    cargo: r[2],
+    areaId: r[3],
+    ingreso: r[4],
+    contrato: r[5],
+    email: `${r[0]}.${r[1].split(" ")[0]}${DOMINIO}`.toLowerCase(),
+    salario: r[6],
+    activo: i !== 11
+  }));
+  const hoy = todayIso();
+  const dias = [];
+  let cursor = addDays(hoy, -1);
+  while (dias.length < 5) {
+    if (isWorkday(cursor)) {
+      dias.push(cursor);
+    }
+    cursor = addDays(cursor, -1);
+  }
+  const asistencias = [];
+  empleados.filter((e) => e.activo).forEach((e, i) => {
+    dias.forEach((fecha, d) => {
+      const entrada = fromMin(7 * 60 + 45 + ((i * 7 + d * 3) % 30));
+      const salida = fromMin(17 * 60 + ((i * 11 + d * 5) % 100));
+      asistencias.push({ id: asistencias.length + 1, empleadoId: e.id, fecha, entrada, salida, creado: `${fecha}T${entrada}`, corregido: false });
+    });
+  });
+  const mk = (empleadoId, tipo, ini, dur, estado, motivo, resueltoPor) => ({
+    id: 0,
+    empleadoId,
+    tipo,
+    inicio: addDays(hoy, ini),
+    fin: addDays(hoy, ini + dur - 1),
+    motivo,
+    adjunto: tipo === "medico" ? "Certificado medico simulado CM-2026" : "",
+    estado,
+    creado: addDays(hoy, -3),
+    resueltoPor: resueltoPor || ""
+  });
+  const permisos = [
+    mk(2, "vacaciones", -40, 5, "aprobado", "Vacaciones familiares programadas con anticipacion", "rosa.quispe"),
+    mk(9, "vacaciones", -60, 10, "aprobado", "Vacaciones de verano acordadas con el area", "rosa.quispe"),
+    mk(2, "personal", 3, 1, "pendiente", "Tramite personal en notaria que requiere asistencia presencial"),
+    mk(6, "medico", 2, 2, "pendiente", "Cita con especialista y examenes de laboratorio programados"),
+    mk(8, "personal", 5, 1, "pendiente", "Gestion de documentos en el registro civil de la ciudad"),
+    mk(9, "duelo", 1, 3, "pendiente", "Fallecimiento de un familiar cercano fuera de la ciudad"),
+    mk(4, "otro", 7, 1, "pendiente", "Capacitacion externa sobre normas tributarias vigentes"),
+    mk(10, "medico", -10, 1, "rechazado", "Control medico de rutina programado en horario laboral", "elena.camayo"),
+    mk(3, "personal", -20, 1, "aprobado", "Matricula de hijo en institucion educativa de la ciudad", "sofia.torres"),
+    mk(7, "vacaciones", 20, 7, "aprobado", "Vacaciones programadas por cierre de inventario anual", "sofia.torres")
+  ];
+  permisos.forEach((p, i) => {
+    p.id = i + 1;
+  });
+  const pass = hashPass("Tecno2026");
+  const users = [
+    { username: "rrhh", hash: pass, grupo: "Admin RRHH", empleadoId: 11, activo: true },
+    { username: "jefe.sistemas", hash: pass, grupo: "Jefe de Area", empleadoId: 1, activo: true },
+    { username: "jefe.ventas", hash: pass, grupo: "Jefe de Area", empleadoId: 5, activo: true },
+    { username: "empleado1", hash: pass, grupo: "Empleado", empleadoId: 2, activo: true },
+    { username: "empleado2", hash: pass, grupo: "Empleado", empleadoId: 6, activo: true },
+    { username: "contador", hash: pass, grupo: "Contador", empleadoId: 3, activo: true },
+    { username: "exempleado", hash: pass, grupo: "Empleado", empleadoId: 12, activo: false }
+  ];
+  return { areas, empleados, asistencias, permisos, users, notificaciones: [], logs: [] };
+};
+
+const loadDb = () => {
+  try {
+    const raw = localStorage.getItem(DB_KEY);
+    if (raw) {
+      return JSON.parse(raw);
+    }
+  } catch (err) {
+    return null;
+  }
+  return null;
+};
+let db = loadDb() || seedDb();
+const saveDb = () => localStorage.setItem(DB_KEY, JSON.stringify(db));
+saveDb();
+
+const byId = (list, id) => list.find((item) => item.id === Number(id));
+const fullName = (p) => `${p.apellidos}, ${p.nombres}`;
+const nextId = (list) => list.reduce((max, item) => Math.max(max, item.id), 0) + 1;
+const areaName = (id) => byId(db.areas, id).nombre;
