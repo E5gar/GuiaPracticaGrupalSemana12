@@ -842,3 +842,106 @@ const updateCountdown = () => {
   const remaining = Math.max(0, Math.ceil((SESSION_SECONDS * 1000 - (Date.now() - session.last)) / 1000));
   node.textContent = `${pad(Math.floor(remaining / 60))}:${pad(remaining % 60)}`;
 };
+
+const credentialsTable = () => `
+  <div class="table-wrap"><table class="data-table">
+    <thead><tr><th>Usuario</th><th>Grupo</th><th>Clave</th><th>Cuenta</th></tr></thead>
+    <tbody>${db.users.map((u) => `<tr><td>${esc(u.username)}</td><td>${esc(u.grupo)}</td><td>Tecno2026</td><td>${u.activo ? "Activa" : "Desactivada"}</td></tr>`).join("")}</tbody>
+  </table></div>`;
+
+const sessionConfigHtml = () => `
+  <div class="panel stack-md">
+    <div class="panel-head"><div class="stack-xs"><h2 class="h3">Configuracion de sesion</h2><p class="text-muted">Sesion con timeout de 45 minutos de inactividad. Revisa las cookies en DevTools > Application > Cookies.</p></div>${pill("Timeout configurado", "blue")}</div>
+    <div class="table-wrap"><table class="data-table">
+      <thead><tr><th>Parametro</th><th>Valor</th></tr></thead>
+      <tbody>
+        <tr><td>SESSION_COOKIE_AGE</td><td>${SESSION_SECONDS} segundos (${Math.round(SESSION_SECONDS / 60 * 10) / 10} minutos de inactividad)</td></tr>
+        <tr><td>SESSION_COOKIE_NAME</td><td>${COOKIE_ID}</td></tr>
+        <tr><td>SESSION_COOKIE_SAMESITE</td><td>Strict</td></tr>
+        <tr><td>SESSION_SAVE_EVERY_REQUEST</td><td>Si (la expiracion se renueva con cada actividad)</td></tr>
+        <tr><td>CSRF_COOKIE_NAME</td><td>${COOKIE_CSRF}</td></tr>
+      </tbody>
+    </table></div>
+    <div class="stack-xs"><span class="text-label">document.cookie en este momento</span><pre class="code-block" id="cookie-dump"></pre></div>
+  </div>`;
+
+const refreshCookieDump = () => {
+  const node = $("#cookie-dump");
+  if (node) {
+    node.textContent = document.cookie || "Sin cookies visibles. Abre el sitio desde un servidor local (localhost) para que el navegador las guarde.";
+  }
+};
+
+const renderSesion = (host) => {
+  const notice = state.notice ? `<p class="notice notice-warn">${esc(state.notice)}</p>` : "";
+  state.notice = "";
+  if (state.user) {
+    const perms = PERMS[state.user.grupo];
+    host.innerHTML = `
+      <div class="panel stack-md">
+        <div class="panel-head"><div class="stack-xs"><h2 class="h3">Sesion activa</h2><p class="text-muted">Has iniciado sesion como ${esc(nombreUsuario())}.</p></div>${pill(state.user.grupo, "violet")}</div>
+        <div class="stack-xs"><span class="text-label">Permisos del grupo</span><div class="flex-wrap">${perms.map((p) => pill(p, "green")).join("")}</div></div>
+        <div class="form-actions"><button class="btn btn-primary" type="button" data-logout-view>Cerrar sesion</button></div>
+      </div>
+      ${sessionConfigHtml()}`;
+    $("[data-logout-view]", host).addEventListener("click", () => endSession("logout"));
+    refreshCookieDump();
+    return;
+  }
+  const csrf = sessionStorage.getItem(CSRF_KEY) || randomToken();
+  sessionStorage.setItem(CSRF_KEY, csrf);
+  setCookie(COOKIE_CSRF, csrf, SESSION_SECONDS);
+  host.innerHTML = `
+    <div class="grid-2">
+      <div class="panel stack-md">
+        <div class="stack-xs"><h2 class="h3">Iniciar sesion</h2><p class="text-muted">Credenciales corporativas por rol.</p></div>
+        ${notice}
+        <form id="form-login" class="stack-md" novalidate>
+          <input type="hidden" name="csrfmiddlewaretoken" value="${csrf}">
+          <div class="form-grid">${fieldHtml({ id: "username", label: "Usuario", placeholder: "Ejemplo: empleado1" })}${fieldHtml({ id: "password", label: "Contrasena", type: "password" })}</div>
+          <div class="form-actions"><button class="btn btn-primary" type="submit">Ingresar</button></div>
+        </form>
+      </div>
+      <div class="panel stack-md">
+        <div class="stack-xs"><h2 class="h3">Usuarios de prueba</h2><p class="text-muted">Cuentas precargadas por rol. La cuenta exempleado esta desactivada.</p></div>
+        ${credentialsTable()}
+      </div>
+    </div>
+    ${sessionConfigHtml()}`;
+  refreshCookieDump();
+  const form = $("#form-login", host);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const data = readForm(form);
+    const errors = {};
+    if (data.csrfmiddlewaretoken !== sessionStorage.getItem(CSRF_KEY)) {
+      toast("Token CSRF invalido. Recarga la pagina.", "error");
+      return;
+    }
+    if (!data.username) {
+      errors.username = "Ingresa tu usuario.";
+    }
+    if (!data.password) {
+      errors.password = "Ingresa tu contrasena.";
+    }
+    setErrors(form, errors);
+    if (Object.keys(errors).length > 0) {
+      return;
+    }
+    const user = db.users.find((u) => u.username === data.username && u.hash === hashPass(data.password));
+    if (!user) {
+      writeLog("WARNING", "login_fallido", `usuario_intentado=${sanitize(data.username)}`);
+      setErrors(form, { password: "Usuario o contrasena incorrectos." });
+      toast("Credenciales invalidas.", "error");
+      return;
+    }
+    const res = dispatch({ kind: "action", name: "login", perm: null, data: { username: user.username } });
+    if (!res.ok) {
+      setErrors(form, { username: res.reason });
+      toast(res.reason, "error");
+      return;
+    }
+    startSession(user);
+    toast(`Bienvenido, ${nombreUsuario()}.`);
+  });
+};
