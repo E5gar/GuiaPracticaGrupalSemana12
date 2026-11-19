@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ejercicio 3 - Control de Asistencia y Permisos</title>
+  <link rel="stylesheet" href="../styles/global.css">
+  <link rel="stylesheet" href="./styles.css">
+  <script src="../scripts/global.js" defer></script>
+  <script src="./script.js" defer></script>
+</head>
+<body>
+  <header class="site-nav">
+    <div class="site-nav-inner">
+      <a class="site-brand" href="../index.html">
+        <span class="site-brand-mark">S12</span>
+        <span>Guia Practica Grupal</span>
+      </a>
+
+      <nav class="nav-links" aria-label="Navegacion principal">
+        <div class="nav-item" data-dropdown>
+          <button class="nav-link" type="button" data-dropdown-trigger aria-expanded="false">
+            <span>Ejercicios</span>
+          </button>
+          <div class="nav-dropdown-panel">
+            <a class="nav-dropdown-link" href="../ejercicio-1/index.html">
+              <span>Ejercicio 1</span>
+              <span class="text-caption">Gago</span>
+            </a>
+            <a class="nav-dropdown-link" href="../ejercicio-2/index.html">
+              <span>Ejercicio 2</span>
+              <span class="text-caption">Huamanlazo</span>
+            </a>
+            <a class="nav-dropdown-link" href="./index.html">
+              <span>Ejercicio 3</span>
+              <span class="text-caption">Huamanlazo</span>
+            </a>
+          </div>
+        </div>
+        <a class="nav-link" href="../index.html">Portal</a>
+      </nav>
+
+      <div class="nav-actions">
+        <button class="theme-toggle" type="button" data-theme-toggle aria-pressed="false">
+          <span data-theme-label>Modo oscuro</span>
+        </button>
+        <button class="nav-hamburger" type="button" data-mobile-toggle aria-expanded="false" aria-label="Abrir menu">
+          <span class="nav-hamburger-line"></span>
+          <span class="nav-hamburger-line"></span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="nav-mobile-menu" data-mobile-menu aria-hidden="true">
+    <a class="nav-mobile-link" href="../index.html">Portal</a>
+    <a class="nav-mobile-link" href="../ejercicio-1/index.html">Ejercicio 1 - Edgar Gago</a>
+    <a class="nav-mobile-link" href="../ejercicio-2/index.html">Ejercicio 2 - Huamanlazo Pariona</a>
+    <a class="nav-mobile-link" href="./index.html">Ejercicio 3 - Huamanlazo Pariona</a>
+  </div>
+
+  <main>
+    <section class="section-compact">
+      <div class="container stack-md">
+        <div class="flex-wrap items-center">
+          <span class="pill pill-violet">Caso 3</span>
+          <span class="pill pill-blue">TecnoAndes S.A.C.</span>
+        </div>
+        <h1 class="display anim-cascade-in" style="--stagger: 0;">Control de Asistencia y Permisos</h1>
+        <p class="h4 text-muted anim-cascade-in" style="--stagger: 1; max-width: 46rem;">
+          Marcacion de asistencia, permisos y vacaciones con flujo de aprobacion, roles jerarquicos, middleware de control y panel de operaciones RRHH.
+        </p>
+
+        <div id="session-bar" class="session-bar" aria-live="polite"></div>
+        <div id="alert-region" class="alert-region" aria-live="polite"></div>
+        <nav id="tabs" class="tabs" aria-label="Secciones de la plataforma"></nav>
+        <div id="view" class="view stack-md"></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast-region" class="toast-region" aria-live="polite"></div>
+</body>
+</html>
