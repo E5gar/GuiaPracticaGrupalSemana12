@@ -1150,3 +1150,35 @@ hooks.boot.push(() => {
     }
   }
 });
+
+const levelColor = { AUDIT: "blue", SENSIBLE: "violet", WARNING: "amber", INFO: "green" };
+
+const renderAuditoria = (host) => {
+  host.innerHTML = `
+    <div class="panel stack-md">
+      <div class="panel-head"><div class="stack-xs"><h2 class="h3">Registro de auditoria</h2><p class="text-muted">Middleware de auditoria medica: quien accedio a que historial, intentos no autorizados y acciones criticas.</p></div>
+        <div class="field"><label class="sr-only" for="filtro-nivel">Filtrar por nivel</label>
+          <select id="filtro-nivel"><option value="">Todos los niveles</option><option>AUDIT</option><option>SENSIBLE</option><option>WARNING</option><option>INFO</option></select>
+        </div>
+      </div>
+      <div class="stat-row" id="log-stats"></div>
+      <div class="stack-xs"><span class="text-label">Salida del middleware (equivalente a la consola)</span><pre class="console" id="log-console"></pre></div>
+      <div id="log-table"></div>
+    </div>`;
+  const refresh = () => {
+    const nivel = $("#filtro-nivel", host).value;
+    const all = db.logs.slice().reverse();
+    const shown = all.filter((l) => !nivel || l.level === nivel).slice(0, 40);
+    const count = (level) => db.logs.filter((l) => l.level === level).length;
+    $("#log-stats", host).innerHTML = ["AUDIT", "SENSIBLE", "WARNING", "INFO"].map((l) => `<div class="stat"><span class="text-caption">${l}</span><strong>${count(l)}</strong></div>`).join("");
+    $("#log-console", host).textContent = shown.length === 0 ? "Sin registros todavia." : shown.map((l) => `[${l.level}] ${l.ts} usuario=${l.user} accion=${l.action} ${l.detail}`).join("\n");
+    $("#log-table", host).innerHTML = `<div class="table-wrap"><table class="data-table">
+      <thead><tr><th>Fecha y hora</th><th>Nivel</th><th>Usuario</th><th>Accion</th><th>Detalle</th></tr></thead>
+      <tbody>${shown.length === 0 ? `<tr><td colspan="5" class="empty-state">No hay registros.</td></tr>` : shown.map((l) => `<tr><td>${esc(l.ts)}</td><td>${pill(l.level, levelColor[l.level] || "blue")}</td><td>${esc(l.user)}</td><td>${esc(l.action)}</td><td class="wrap">${esc(l.detail)}</td></tr>`).join("")}</tbody>
+    </table></div>`;
+  };
+  $("#filtro-nivel", host).addEventListener("change", refresh);
+  refresh();
+};
+
+registerView({ id: "auditoria", title: "Auditoria", order: 80, perm: "ver_auditoria", render: renderAuditoria });
