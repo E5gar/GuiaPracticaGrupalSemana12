@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Guia Practica Grupal Semana 12</title>
+  <link rel="stylesheet" href="./styles/global.css">
+  <script src="./scripts/global.js" defer></script>
+</head>
+<body>
+  <header class="site-nav">
+    <div class="site-nav-inner">
+      <a class="site-brand" href="./index.html">
+        <span class="site-brand-mark">S12</span>
+        <span>Guia Practica Grupal</span>
+      </a>
+
+      <nav class="nav-links" aria-label="Navegacion principal">
+        <div class="nav-item" data-dropdown>
+          <button class="nav-link" type="button" data-dropdown-trigger aria-expanded="false">
+            <span>Ejercicios</span>
+          </button>
+          <div class="nav-dropdown-panel">
+            <a class="nav-dropdown-link" href="./ejercicio-1/index.html">
+              <span>Ejercicio 1</span>
+              <span class="text-caption">Gago</span>
+            </a>
+            <a class="nav-dropdown-link" href="./ejercicio-2/index.html">
+              <span>Ejercicio 2</span>
+              <span class="text-caption">Huamanlazo</span>
+            </a>
+            <a class="nav-dropdown-link" href="./ejercicio-3/index.html">
+              <span>Ejercicio 3</span>
+              <span class="text-caption">Huamanlazo</span>
+            </a>
+          </div>
+        </div>
+        <a class="nav-link" href="./REPARTO.md">Reparto</a>
+      </nav>
+
+      <div class="nav-actions">
+        <button class="theme-toggle" type="button" data-theme-toggle aria-pressed="false">
+          <span data-theme-label>Modo oscuro</span>
+        </button>
+        <button class="nav-hamburger" type="button" data-mobile-toggle aria-expanded="false" aria-label="Abrir menu">
+          <span class="nav-hamburger-line"></span>
+          <span class="nav-hamburger-line"></span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="nav-mobile-menu" data-mobile-menu aria-hidden="true">
+    <a class="nav-mobile-link" href="./ejercicio-1/index.html">Ejercicio 1 - Edgar Gago</a>
+    <a class="nav-mobile-link" href="./ejercicio-2/index.html">Ejercicio 2 - Huamanlazo Pariona</a>
+    <a class="nav-mobile-link" href="./ejercicio-3/index.html">Ejercicio 3 - Huamanlazo Pariona</a>
+    <a class="nav-mobile-link" href="./REPARTO.md">Guia de reparto</a>
+  </div>
+
+  <main>
+    <section class="section-compact">
+      <div class="container stack-md">
+        <div class="flex-wrap items-center">
+          <span class="pill pill-blue">Semana 12</span>
+          <span class="pill pill-green">CSS Puro en Capas</span>
+        </div>
+
+        <h1 class="display anim-cascade-in" style="--stagger: 0;">Portal de Ejercicios Grupales</h1>
+        <p class="h4 text-muted anim-cascade-in" style="--stagger: 1; max-width: 44rem;">
+          Base visual compartida mediante capas CSS (theme, base, components, utilities) con soporte para modo claro y oscuro.
+        </p>
+
+        <div class="flex-wrap items-center anim-cascade-in" style="--stagger: 2;">
+          <a class="btn btn-primary" href="./ejercicio-1/index.html">Ir al Ejercicio 1</a>
+          <a class="btn btn-surface" href="./ejercicio-2/index.html">Ir al Ejercicio 2</a>
+          <a class="btn btn-surface" href="./ejercicio-3/index.html">Ir al Ejercicio 3</a>
+          <button class="widget-copy" type="button" data-copy="https://github.com/E5gar/GuiaPracticaGrupalSemana12.git" aria-label="Copiar enlace del repositorio">
+            <span class="widget-copy-icon" aria-hidden="true">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="3"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+            </span>
+            <span class="widget-copy-label">Copiar URL del repo</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <section class="section-compact">
+      <div class="container grid-3">
+        <a class="card stack-sm anim-cascade-in" style="--stagger: 0;" href="./ejercicio-1/index.html">
+          <div class="flex-wrap items-center justify-between">
+            <span class="pill pill-blue">Ejercicio 1</span>
+            <span class="text-caption">dev/Gago-Edgar</span>
+          </div>
+          <h2 class="h3">Modulo 01</h2>
+          <p class="text-muted">Responsable: Edgar Gago. Carpeta asignada: ejercicio-1.</p>
+        </a>
+
+        <a class="card stack-sm anim-cascade-in" style="--stagger: 1;" href="./ejercicio-2/index.html">
+          <div class="flex-wrap items-center justify-between">
+            <span class="pill pill-violet">Ejercicio 2</span>
+            <span class="text-caption">dev/Huamanlazo-Pariona</span>
+          </div>
+          <h2 class="h3">Modulo 02</h2>
+          <p class="text-muted">Responsable: Huamanlazo Pariona. Carpeta asignada: ejercicio-2.</p>
+        </a>
+
+        <a class="card stack-sm anim-cascade-in" style="--stagger: 2;" href="./ejercicio-3/index.html">
+          <div class="flex-wrap items-center justify-between">
+            <span class="pill pill-amber">Ejercicio 3</span>
+            <span class="text-caption">dev/Huamanlazo-Pariona</span>
+          </div>
+          <h2 class="h3">Modulo 03</h2>
+          <p class="text-muted">Responsable: Huamanlazo Pariona. Carpeta asignada: ejercicio-3.</p>
+        </a>
+      </div>
+    </section>
+
+    <section class="section-compact">
+      <div class="container">
+        <div class="anim-scope stack-sm">
+          <div class="flex-wrap items-center justify-between">
+            <h2 class="h4">Entorno embebido (.anim-scope)</h2>
+            <span class="anim-scope-chip">Inter Variable + Cuadricula de puntos</span>
+          </div>
+          <div class="anim-scope-grid">
+            <div class="anim-scope-card stack-xs">
+              <span class="text-label">Capas activas</span>
+              <span class="text-caption">theme, base, components, utilities</span>
+            </div>
+            <div class="anim-scope-card stack-xs">
+              <span class="text-label">Flujo de merges</span>
+              <span class="text-caption">Exclusivo mediante Pull Request en GitHub</span>
+            </div>
+            <div class="anim-scope-card stack-xs">
+              <span class="text-label">Sin conflictos</span>
+              <span class="text-caption">Cada integrante edita solo su carpeta asignada</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

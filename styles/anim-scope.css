@@ -1,0 +1,56 @@
+.anim-scope {
+  font-family: var(--font-anim);
+  --anim-bg: #f2f2f2;
+  --anim-surface: #ffffff;
+  --anim-ink: #1a1a1a;
+  --anim-muted: #737373;
+  --anim-dot: rgba(26, 26, 26, 0.14);
+  --anim-border: rgba(26, 26, 26, 0.08);
+  --anim-radius-sm: 8px;
+  --anim-radius-md: 16px;
+  --anim-radius-lg: 30px;
+  background-color: var(--anim-bg);
+  background-image: radial-gradient(var(--anim-dot) 1.25px, transparent 1.25px);
+  background-size: 20px 20px;
+  color: var(--anim-ink);
+  border-radius: var(--anim-radius-lg);
+  border: 1px solid var(--anim-border);
+  padding: calc(var(--space-unit) * 8);
+  box-shadow: var(--shadow-default);
+}
+
+.dark .anim-scope,
+.anim-scope.dark {
+  --anim-bg: #0e0e0e;
+  --anim-surface: #181818;
+  --anim-ink: #eaeaea;
+  --anim-muted: #919191;
+  --anim-dot: rgba(255, 255, 255, 0.12);
+  --anim-border: rgba(255, 255, 255, 0.08);
+}
+
+.anim-scope-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: calc(var(--space-unit) * 4);
+}
+
+.anim-scope-card {
+  background: var(--anim-surface);
+  color: var(--anim-ink);
+  border: 1px solid var(--anim-border);
+  border-radius: var(--anim-radius-md);
+  padding: calc(var(--space-unit) * 5);
+  box-shadow: var(--shadow-subtle);
+}
+
+.anim-scope-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: calc(var(--space-unit) * 1.5) calc(var(--space-unit) * 3);
+  border-radius: var(--anim-radius-sm);
+  border: 1px solid var(--anim-border);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-medium);
+  color: var(--anim-muted);
+}

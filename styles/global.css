@@ -1,0 +1,7 @@
+@layer theme, base, components, utilities;
+@import url("./fonts.css");
+@import url("./theme.css") layer(theme);
+@import url("./base.css") layer(base);
+@import url("./components.css") layer(components);
+@import url("./anim-scope.css") layer(components);
+@import url("./utilities.css") layer(utilities);
