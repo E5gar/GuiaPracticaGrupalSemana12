@@ -1106,3 +1106,22 @@ useMiddleware("auditoria", (req, next) => {
   }
   return res;
 });
+
+const dentroDeHorario = (fecha, hora) => {
+  const dow = dayOfWeek(fecha);
+  const start = toMin(hora);
+  if (dow === 0) {
+    return false;
+  }
+  const end = dow === 6 ? 13 * 60 : 18 * 60;
+  return start >= 8 * 60 && start + 30 <= end;
+};
+
+useMiddleware("horario", (req, next) => {
+  if (req.kind === "action" && req.name === "agendar_cita" && req.data && req.data.fecha && req.data.hora) {
+    if (!dentroDeHorario(req.data.fecha, req.data.hora)) {
+      return { ok: false, status: 422, reason: "Fuera del horario de atencion: L-V 8:00-18:00 y Sab 8:00-13:00. Cada cita dura 30 minutos." };
+    }
+  }
+  return next();
+});
