@@ -764,3 +764,58 @@ useMiddleware("autorizacion", (req, next) => {
   }
   return next();
 });
+
+const persistSession = () => {
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+};
+
+const touchSession = () => {
+  if (!session) {
+    return;
+  }
+  const now = Date.now();
+  if (now - session.last < 1000) {
+    return;
+  }
+  session.last = now;
+  persistSession();
+  setCookie(COOKIE_ID, session.id, SESSION_SECONDS);
+};
+
+const defaultView = (user) => {
+  const wanted = user.grupo === "Contador" ? ["reportes"] : ["marcacion"];
+  const found = wanted.find((id) => views.some((v) => v.id === id));
+  return found || "sesion";
+};
+
+const startSession = (user) => {
+  state.user = user;
+  session = { username: user.username, id: randomToken(), last: Date.now() };
+  persistSession();
+  setCookie(COOKIE_ID, session.id, SESSION_SECONDS);
+  writeLog("INFO", "login", `grupo=${user.grupo}`);
+  hooks.afterLogin.forEach((fn) => fn(user));
+  state.view = defaultView(user);
+  renderApp();
+};
+
+const endSession = (reason) => {
+  const wasUser = state.user;
+  if (wasUser) {
+    writeLog(reason === "expired" ? "WARNING" : "INFO", reason === "expired" ? "sesion_expirada" : "logout", `inactividad_max=${SESSION_SECONDS}s`);
+  }
+  state.user = null;
+  session = null;
+  sessionStorage.removeItem(SESSION_KEY);
+  clearCookie(COOKIE_ID);
+  const alerts = $("#alert-region");
+  if (alerts) {
+    alerts.innerHTML = "";
+  }
+  state.view = "sesion";
+  state.notice = reason === "expired" ? "Tu sesion expiro por inactividad. Inicia sesion nuevamente." : "";
+  renderApp();
+  if (reason === "expired") {
+    toast("Sesion cerrada por inactividad.", "error");
+  }
+};
