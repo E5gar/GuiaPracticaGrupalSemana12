@@ -691,3 +691,43 @@ const renderPermisos = (host) => {
 registerView({ id: "marcacion", title: "Marcacion", order: 40, perm: "registrar_asistencia", render: renderMarcacion });
 registerView({ id: "permisos", title: "Permisos", order: 50, perm: "solicitar_permiso", render: renderPermisos });
 registerView({ id: "correccion", title: "Correccion", order: 70, perm: "corregir_asistencia", render: renderCorreccion });
+
+const PERMS = {
+  "Admin RRHH": ["registrar_asistencia", "solicitar_permiso", "aprobar_permiso", "ver_reportes", "ver_reportes_globales", "corregir_asistencia", "registrar_empleado", "ver_equipo", "ver_salarios", "gestion_rrhh", "ver_auditoria"],
+  "Jefe de Area": ["registrar_asistencia", "solicitar_permiso", "aprobar_permiso", "ver_reportes", "ver_reportes_area", "ver_equipo"],
+  "Empleado": ["registrar_asistencia", "solicitar_permiso"],
+  "Contador": ["ver_reportes", "ver_reportes_globales"]
+};
+const ALL_PERMS = ["registrar_asistencia", "solicitar_permiso", "aprobar_permiso", "ver_reportes_area", "ver_reportes_globales", "corregir_asistencia", "ver_reportes", "ver_equipo", "registrar_empleado", "ver_salarios", "gestion_rrhh", "ver_auditoria"];
+const GRUPOS = Object.keys(PERMS);
+
+const SESSION_KEY = "ta_session";
+const CSRF_KEY = "ta_csrf";
+const COOKIE_ID = "ta_sessionid";
+const COOKIE_CSRF = "ta_csrftoken";
+const urlParams = new URLSearchParams(window.location.search);
+const SESSION_SECONDS = Number(urlParams.get("timeout")) > 0 ? Number(urlParams.get("timeout")) : 45 * 60;
+let session = null;
+hooks.afterLogin = [];
+
+const randomToken = () => Array.from(crypto.getRandomValues(new Uint8Array(16))).map((b) => b.toString(16).padStart(2, "0")).join("");
+const setCookie = (name, value, seconds) => {
+  const secure = window.location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${name}=${value}; max-age=${seconds}; path=/; SameSite=Strict${secure}`;
+};
+const clearCookie = (name) => {
+  document.cookie = `${name}=; max-age=0; path=/; SameSite=Strict`;
+};
+
+can = (perm) => {
+  if (!perm) {
+    return true;
+  }
+  if (!state.user) {
+    return false;
+  }
+  if (perm === "auth") {
+    return true;
+  }
+  return PERMS[state.user.grupo].includes(perm);
+};
