@@ -266,3 +266,16 @@
     max-width: none;
   }
 }
+
+.panel .panel {
+  background: var(--surface-elevated);
+  box-shadow: none;
+}
+
+.panel .form-actions .field {
+  min-width: 0;
+}
+
+.text-caption strong {
+  color: var(--ink);
+}
