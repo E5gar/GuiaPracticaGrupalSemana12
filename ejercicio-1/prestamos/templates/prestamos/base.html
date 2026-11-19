@@ -1,0 +1,103 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Caso 1 - Prestamos de Equipos UNCP{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'global-styles/global.css' %}">
+  <link rel="stylesheet" href="{% static 'prestamos/styles.css' %}">
+  <script src="{% static 'global-scripts/global.js' %}" defer></script>
+  <script src="{% static 'prestamos/script.js' %}" defer></script>
+</head>
+<body>
+  <header class="site-nav">
+    <div class="site-nav-inner">
+      <a class="site-brand" href="{% url 'prestamos:catalogo' %}">
+        <span class="site-brand-mark">L1</span>
+        <span>FIS UNCP</span>
+      </a>
+
+      <nav class="nav-links" aria-label="Navegacion principal">
+        <a class="nav-link" href="{% url 'prestamos:catalogo' %}">Catalogo</a>
+        {% if user.is_authenticated %}
+          <a class="nav-link" href="{% url 'prestamos:mis_prestamos' %}">Prestamos</a>
+          {% if user.rol == 'docente' or user.rol == 'asistente' or user.rol == 'admin' or user.is_superuser %}
+            <a class="nav-link" href="{% url 'prestamos:solicitar_prestamo' %}">Solicitar</a>
+          {% endif %}
+          {% if user.rol == 'asistente' or user.is_superuser %}
+            <a class="nav-link" href="{% url 'prestamos:registrar_devolucion' %}">Devolucion</a>
+          {% endif %}
+          {% if user.rol == 'admin' or user.is_superuser %}
+            <div class="nav-item" data-dropdown>
+              <button class="nav-link" type="button" data-dropdown-trigger aria-expanded="false">
+                <span>Administracion</span>
+              </button>
+              <div class="nav-dropdown-panel">
+                <a class="nav-dropdown-link" href="{% url 'prestamos:auditoria' %}">
+                  <span>Auditoria</span>
+                  <span class="text-caption">RF4</span>
+                </a>
+                <a class="nav-dropdown-link" href="/admin/">
+                  <span>Django Admin</span>
+                  <span class="text-caption">RF5</span>
+                </a>
+              </div>
+            </div>
+          {% endif %}
+        {% endif %}
+      </nav>
+
+      <div class="nav-actions">
+        {% if user.is_authenticated %}
+          <span class="pill pill-blue">{{ user.get_rol_display }}</span>
+          <span class="pill pill-amber">30 min sesion</span>
+          <form method="post" action="{% url 'prestamos:logout' %}" class="inline-form">
+            {% csrf_token %}
+            <button class="btn btn-surface btn-sm" type="submit">Salir</button>
+          </form>
+        {% else %}
+          <span class="pill pill-violet">Invitado</span>
+          <a class="btn btn-primary btn-sm" href="{% url 'prestamos:login' %}">Iniciar sesion</a>
+        {% endif %}
+        <button class="theme-toggle" type="button" data-theme-toggle aria-pressed="false">
+          <span data-theme-label>Modo oscuro</span>
+        </button>
+        <button class="nav-hamburger" type="button" data-mobile-toggle aria-expanded="false" aria-label="Abrir menu">
+          <span class="nav-hamburger-line"></span>
+          <span class="nav-hamburger-line"></span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="nav-mobile-menu" data-mobile-menu aria-hidden="true">
+    <a class="nav-mobile-link" href="{% url 'prestamos:catalogo' %}">Catalogo de Equipos</a>
+    {% if user.is_authenticated %}
+      <a class="nav-mobile-link" href="{% url 'prestamos:mis_prestamos' %}">Listado de Prestamos</a>
+      <a class="nav-mobile-link" href="{% url 'prestamos:solicitar_prestamo' %}">Solicitar Prestamo</a>
+      <a class="nav-mobile-link" href="{% url 'prestamos:registrar_devolucion' %}">Registrar Devolucion</a>
+      <a class="nav-mobile-link" href="{% url 'prestamos:auditoria' %}">Middleware de Auditoria</a>
+      <a class="nav-mobile-link" href="/admin/">Django Admin</a>
+    {% else %}
+      <a class="nav-mobile-link" href="{% url 'prestamos:login' %}">Iniciar Sesion UNCP</a>
+    {% endif %}
+  </div>
+
+  <main>
+    {% if messages %}
+      <section class="section-messages">
+        <div class="container stack-xs">
+          {% for message in messages %}
+            <div class="alert-banner alert-{{ message.tags|default:'info' }}">
+              {{ message }}
+            </div>
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
