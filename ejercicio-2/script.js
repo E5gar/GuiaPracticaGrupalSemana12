@@ -770,3 +770,297 @@ const renderHistorial = (host) => {
 registerView({ id: "citas", title: "Citas", order: 40, perm: "auth", render: renderCitas });
 registerView({ id: "consulta", title: "Consulta", order: 50, perm: "registrar_consulta", render: renderConsulta });
 registerView({ id: "historial", title: "Historial", order: 60, perm: "ver_historial_clinico", render: renderHistorial });
+
+const PERMS = {
+  Admins: ["agendar_cita", "cancelar_cita", "generar_reportes", "registrar_paciente", "registrar_medico", "ver_agenda", "marcar_completadas", "ver_auditoria"],
+  Medicos: ["ver_agenda", "registrar_consulta", "ver_historial_clinico", "cancelar_cita", "marcar_completadas"],
+  Recepcionistas: ["agendar_cita", "cancelar_cita", "registrar_paciente", "ver_agenda"],
+  Pacientes: ["agendar_cita", "cancelar_cita", "ver_historial_clinico"]
+};
+const ALL_PERMS = ["agendar_cita", "cancelar_cita", "ver_historial_clinico", "generar_reportes", "registrar_paciente", "registrar_medico", "registrar_consulta", "ver_agenda", "marcar_completadas", "ver_auditoria"];
+const GRUPOS = Object.keys(PERMS);
+
+const SESSION_KEY = "cm_session";
+const CSRF_KEY = "cm_csrf";
+const COOKIE_ID = "cm_sessionid";
+const COOKIE_CSRF = "cm_csrftoken";
+const urlParams = new URLSearchParams(window.location.search);
+const SESSION_SECONDS = Number(urlParams.get("timeout")) > 0 ? Number(urlParams.get("timeout")) : 20 * 60;
+let session = null;
+hooks.afterLogin = [];
+
+const randomToken = () => Array.from(crypto.getRandomValues(new Uint8Array(16))).map((b) => b.toString(16).padStart(2, "0")).join("");
+const setCookie = (name, value, seconds) => {
+  const secure = window.location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${name}=${value}; max-age=${seconds}; path=/; SameSite=Strict${secure}`;
+};
+const clearCookie = (name) => {
+  document.cookie = `${name}=; max-age=0; path=/; SameSite=Strict`;
+};
+
+can = (perm) => {
+  if (!perm) {
+    return true;
+  }
+  if (!state.user) {
+    return false;
+  }
+  if (perm === "auth") {
+    return true;
+  }
+  return PERMS[state.user.grupo].includes(perm);
+};
+
+const writeLog = (level, action, detail) => {
+  const entry = { ts: stamp(), level, user: state.user ? state.user.username : "anonimo", action, detail: detail || "" };
+  db.logs.push(entry);
+  if (db.logs.length > 300) {
+    db.logs.shift();
+  }
+  saveDb();
+  const output = level === "WARNING" ? console.warn : console.log;
+  output(`[${entry.level}] ${entry.ts} usuario=${entry.user} accion=${entry.action} ${entry.detail}`);
+  return entry;
+};
+
+useMiddleware("sesion", (req, next) => {
+  if (req.perm && !req.user) {
+    writeLog("WARNING", "acceso_sin_sesion", `destino=${req.name}`);
+    return { ok: false, status: 401, reason: "Debes iniciar sesion para acceder a este recurso." };
+  }
+  return next();
+});
+
+useMiddleware("autorizacion", (req, next) => {
+  if (req.perm && req.perm !== "auth" && !can(req.perm)) {
+    writeLog("WARNING", "acceso_no_autorizado", `destino=${req.name} permiso=${req.perm}`);
+    return { ok: false, status: 403, reason: `Tu grupo (${req.user.grupo}) no tiene el permiso ${req.perm}.` };
+  }
+  return next();
+});
+
+const persistSession = () => {
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+};
+
+const touchSession = () => {
+  if (!session) {
+    return;
+  }
+  const now = Date.now();
+  if (now - session.last < 1000) {
+    return;
+  }
+  session.last = now;
+  persistSession();
+  setCookie(COOKIE_ID, session.id, SESSION_SECONDS);
+};
+
+const startSession = (user) => {
+  state.user = user;
+  session = { username: user.username, id: randomToken(), last: Date.now() };
+  persistSession();
+  setCookie(COOKIE_ID, session.id, SESSION_SECONDS);
+  writeLog("INFO", "login", `grupo=${user.grupo}`);
+  hooks.afterLogin.forEach((fn) => fn(user));
+  state.view = "citas";
+  renderApp();
+};
+
+const endSession = (reason) => {
+  const wasUser = state.user;
+  if (wasUser) {
+    writeLog(reason === "expired" ? "WARNING" : "INFO", reason === "expired" ? "sesion_expirada" : "logout", `inactividad_max=${SESSION_SECONDS}s`);
+  }
+  state.user = null;
+  session = null;
+  sessionStorage.removeItem(SESSION_KEY);
+  clearCookie(COOKIE_ID);
+  const alerts = $("#alert-region");
+  if (alerts) {
+    alerts.innerHTML = "";
+  }
+  state.view = "sesion";
+  state.notice = reason === "expired" ? "Tu sesion expiro por inactividad. Inicia sesion nuevamente." : "";
+  renderApp();
+  if (reason === "expired") {
+    toast("Sesion cerrada por inactividad.", "error");
+  }
+};
+
+const renderSessionBar = () => {
+  const bar = $("#session-bar");
+  if (!state.user) {
+    bar.innerHTML = `<div class="session-chip">${pill("Invitado", "amber")}<span class="text-muted">Sin sesion activa. Solo puedes ver Sesion y Roles.</span></div>`;
+    return;
+  }
+  bar.innerHTML = `
+    <div class="session-chip">${pill(state.user.grupo, "violet")}<strong>${esc(state.user.nombre)}</strong><span class="text-caption">Usuario: ${esc(state.user.username)}</span>
+      <span class="text-caption">Sesion expira en <strong id="session-countdown" class="mono">--:--</strong></span></div>
+    <button class="btn btn-surface btn-small" type="button" data-logout>Cerrar sesion</button>`;
+  $("[data-logout]", bar).addEventListener("click", () => endSession("logout"));
+  updateCountdown();
+};
+
+const updateCountdown = () => {
+  const node = $("#session-countdown");
+  if (!node || !session) {
+    return;
+  }
+  const remaining = Math.max(0, Math.ceil((SESSION_SECONDS * 1000 - (Date.now() - session.last)) / 1000));
+  node.textContent = `${pad(Math.floor(remaining / 60))}:${pad(remaining % 60)}`;
+};
+
+const credentialsTable = () => `
+  <div class="table-wrap"><table class="data-table">
+    <thead><tr><th>Usuario</th><th>Grupo</th><th>Clave</th></tr></thead>
+    <tbody>${db.users.map((u) => `<tr><td>${esc(u.username)}</td><td>${esc(u.grupo)}</td><td>Uncp2026</td></tr>`).join("")}</tbody>
+  </table></div>`;
+
+const sessionConfigHtml = () => `
+  <div class="panel stack-md">
+    <div class="panel-head"><div class="stack-xs"><h2 class="h3">Configuracion de sesion</h2><p class="text-muted">Equivalente a los ajustes de sesion de Django. Revisa las cookies en DevTools > Application > Cookies.</p></div>${pill("Timeout configurado", "blue")}</div>
+    <div class="table-wrap"><table class="data-table">
+      <thead><tr><th>Parametro</th><th>Valor</th></tr></thead>
+      <tbody>
+        <tr><td>SESSION_COOKIE_AGE</td><td>${SESSION_SECONDS} segundos (${Math.round(SESSION_SECONDS / 60 * 10) / 10} minutos de inactividad)</td></tr>
+        <tr><td>SESSION_COOKIE_NAME</td><td>${COOKIE_ID}</td></tr>
+        <tr><td>SESSION_COOKIE_SAMESITE</td><td>Strict</td></tr>
+        <tr><td>SESSION_SAVE_EVERY_REQUEST</td><td>Si (la expiracion se renueva con cada actividad)</td></tr>
+        <tr><td>CSRF_COOKIE_NAME</td><td>${COOKIE_CSRF}</td></tr>
+      </tbody>
+    </table></div>
+    <div class="stack-xs"><span class="text-label">document.cookie en este momento</span><pre class="code-block" id="cookie-dump"></pre></div>
+  </div>`;
+
+const refreshCookieDump = () => {
+  const node = $("#cookie-dump");
+  if (node) {
+    node.textContent = document.cookie || "Sin cookies visibles. Abre el sitio desde un servidor local (localhost) para que el navegador las guarde.";
+  }
+};
+
+const renderSesion = (host) => {
+  const notice = state.notice ? `<p class="notice notice-warn">${esc(state.notice)}</p>` : "";
+  state.notice = "";
+  if (state.user) {
+    const perms = PERMS[state.user.grupo];
+    host.innerHTML = `
+      <div class="panel stack-md">
+        <div class="panel-head"><div class="stack-xs"><h2 class="h3">Sesion activa</h2><p class="text-muted">Has iniciado sesion como ${esc(state.user.nombre)}.</p></div>${pill(state.user.grupo, "violet")}</div>
+        <div class="stack-xs"><span class="text-label">Permisos del grupo</span><div class="flex-wrap">${perms.map((p) => pill(p, "green")).join("")}</div></div>
+        <div class="form-actions"><button class="btn btn-primary" type="button" data-logout-view>Cerrar sesion</button></div>
+      </div>
+      ${sessionConfigHtml()}`;
+    $("[data-logout-view]", host).addEventListener("click", () => endSession("logout"));
+    refreshCookieDump();
+    return;
+  }
+  const csrf = sessionStorage.getItem(CSRF_KEY) || randomToken();
+  sessionStorage.setItem(CSRF_KEY, csrf);
+  setCookie(COOKIE_CSRF, csrf, SESSION_SECONDS);
+  host.innerHTML = `
+    <div class="grid-2">
+      <div class="panel stack-md">
+        <div class="stack-xs"><h2 class="h3">Iniciar sesion</h2><p class="text-muted">Login diferenciado por tipo de usuario.</p></div>
+        ${notice}
+        <form id="form-login" class="stack-md" novalidate>
+          <input type="hidden" name="csrfmiddlewaretoken" value="${csrf}">
+          <div class="form-grid">${fieldHtml({ id: "username", label: "Usuario", placeholder: "Ejemplo: medico1" })}${fieldHtml({ id: "password", label: "Contrasena", type: "password" })}</div>
+          <div class="form-actions"><button class="btn btn-primary" type="submit">Ingresar</button></div>
+        </form>
+      </div>
+      <div class="panel stack-md">
+        <div class="stack-xs"><h2 class="h3">Usuarios de prueba</h2><p class="text-muted">Cuentas precargadas por grupo.</p></div>
+        ${credentialsTable()}
+      </div>
+    </div>
+    ${sessionConfigHtml()}`;
+  refreshCookieDump();
+  const form = $("#form-login", host);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const data = readForm(form);
+    const errors = {};
+    if (data.csrfmiddlewaretoken !== sessionStorage.getItem(CSRF_KEY)) {
+      toast("Token CSRF invalido. Recarga la pagina.", "error");
+      return;
+    }
+    if (!data.username) {
+      errors.username = "Ingresa tu usuario.";
+    }
+    if (!data.password) {
+      errors.password = "Ingresa tu contrasena.";
+    }
+    setErrors(form, errors);
+    if (Object.keys(errors).length > 0) {
+      return;
+    }
+    const user = db.users.find((u) => u.username === data.username && u.hash === hashPass(data.password));
+    if (!user) {
+      writeLog("WARNING", "login_fallido", `usuario_intentado=${sanitize(data.username)}`);
+      setErrors(form, { password: "Usuario o contrasena incorrectos." });
+      toast("Credenciales invalidas.", "error");
+      return;
+    }
+    startSession(user);
+    toast(`Bienvenido, ${user.nombre}.`);
+  });
+};
+
+const renderRoles = (host) => {
+  host.innerHTML = `
+    <div class="panel stack-md">
+      <div class="panel-head"><div class="stack-xs"><h2 class="h3">Diagrama de roles y permisos</h2><p class="text-muted">Cada grupo hereda un conjunto de permisos granulares. El acceso se valida en el middleware de autorizacion.</p></div>${pill("4 grupos", "violet")}</div>
+      <div class="grid-2">${GRUPOS.map((g) => `
+        <div class="panel stack-sm role-card">
+          <div class="panel-head"><h3 class="h4">${esc(g)}</h3>${pill(`${PERMS[g].length} permisos`, "blue")}</div>
+          <div class="flex-wrap">${PERMS[g].map((p) => pill(p, "green")).join("")}</div>
+        </div>`).join("")}</div>
+    </div>
+    <div class="panel stack-md">
+      <h2 class="h3">Matriz de permisos</h2>
+      <div class="table-wrap"><table class="data-table matrix">
+        <thead><tr><th>Permiso</th>${GRUPOS.map((g) => `<th>${esc(g)}</th>`).join("")}</tr></thead>
+        <tbody>${ALL_PERMS.map((p) => `<tr><td>${esc(p)}</td>${GRUPOS.map((g) => `<td class="${PERMS[g].includes(p) ? "cell-yes" : "cell-no"}">${PERMS[g].includes(p) ? "Si" : "No"}</td>`).join("")}</tr>`).join("")}</tbody>
+      </table></div>
+      <p class="text-caption">ver_historial_clinico: solo medicos y el propio paciente. generar_reportes: solo administradores.</p>
+    </div>`;
+};
+
+registerView({ id: "sesion", title: "Sesion", order: 10, perm: null, render: renderSesion });
+registerView({ id: "roles", title: "Roles", order: 20, perm: null, render: renderRoles });
+
+hooks.render.push(renderSessionBar);
+
+hooks.boot.push(() => {
+  state.view = "sesion";
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    if (raw) {
+      const saved = JSON.parse(raw);
+      const user = db.users.find((u) => u.username === saved.username);
+      if (user && Date.now() - saved.last < SESSION_SECONDS * 1000) {
+        session = saved;
+        state.user = user;
+        state.view = "citas";
+      } else {
+        sessionStorage.removeItem(SESSION_KEY);
+      }
+    }
+  } catch (err) {
+    sessionStorage.removeItem(SESSION_KEY);
+  }
+  ["click", "keydown", "touchstart", "scroll"].forEach((name) => document.addEventListener(name, touchSession, { passive: true }));
+  window.setInterval(() => {
+    if (!state.user || !session) {
+      return;
+    }
+    if (Date.now() - session.last >= SESSION_SECONDS * 1000) {
+      endSession("expired");
+      return;
+    }
+    updateCountdown();
+    refreshCookieDump();
+  }, 1000);
+});
