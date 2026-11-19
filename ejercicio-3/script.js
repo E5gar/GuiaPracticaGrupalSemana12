@@ -1283,3 +1283,28 @@ const renderRrhh = (host) => {
   };
   render();
 };
+
+const renderManual = (host) => {
+  host.innerHTML = `
+    <div class="panel stack-md">
+      <div class="panel-head"><div class="stack-xs"><h2 class="h3">Manual de usuario para empleados</h2><p class="text-muted">Guia rapida de una pagina para el uso diario del sistema.</p></div>${pill("1 pagina", "green")}</div>
+      <div class="stack-sm">
+        <h3 class="h4">1. Ingresar al sistema</h3>
+        <p>Abre la seccion Sesion, escribe tu usuario y contrasena corporativos y pulsa Ingresar. La sesion se cierra tras 45 minutos sin actividad.</p>
+        <h3 class="h4">2. Marcar asistencia</h3>
+        <p>En Marcacion pulsa Marcar entrada al llegar y Marcar salida al terminar. Solo se acepta entre las 6:00 y 10:00 (entrada) y entre las 15:00 y 19:00 (salida). No puedes marcar dos entradas el mismo dia sin una salida.</p>
+        <h3 class="h4">3. Horas extra</h3>
+        <p>El sistema calcula las horas trabajadas y considera horas extra todo lo que supere las 8 horas diarias.</p>
+        <h3 class="h4">4. Solicitar permisos o vacaciones</h3>
+        <p>En Permisos elige el tipo, las fechas y explica el motivo con al menos 30 caracteres. No puedes solicitar fechas que se superpongan con otro permiso ni mas vacaciones de las disponibles.</p>
+        <h3 class="h4">5. Seguimiento</h3>
+        <p>Tu solicitud queda pendiente hasta que tu jefe de area o RRHH la apruebe o rechace. Veras el resultado en la seccion Notificaciones de Permisos.</p>
+        <h3 class="h4">6. Errores de marcacion</h3>
+        <p>Pasadas 24 horas no puedes modificar un registro. Pide a RRHH una correccion con su justificacion.</p>
+      </div>
+    </div>`;
+};
+
+registerView({ id: "reportes", title: "Reportes", order: 65, perm: "ver_reportes", render: renderReportes });
+registerView({ id: "rrhh", title: "Operaciones RRHH", order: 66, perm: "gestion_rrhh", render: renderRrhh });
+registerView({ id: "manual", title: "Manual", order: 25, perm: null, render: renderManual });
