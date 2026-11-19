@@ -1295,3 +1295,33 @@ const renderEstadisticas = (host) => {
     </div>
     <div class="stack-sm"><h3 class="h4">Pacientes frecuentes</h3>${bars(frecuentes, Math.max(frecuentes[0].value, 1))}</div>`;
 };
+
+const renderAdmin = (host) => {
+  host.innerHTML = `<div class="panel stack-md" id="sec-agenda"></div>
+    ${can("registrar_paciente") ? `<div class="panel stack-md" id="sec-pacientes"></div>` : ""}
+    ${can("generar_reportes") ? `<div class="panel stack-md" id="sec-stats"></div>` : ""}
+    ${can("generar_reportes") ? `<div class="panel stack-sm"><div class="panel-head"><h2 class="h3">Datos de prueba</h2><button class="btn btn-surface btn-small" type="button" id="reset-datos">Restablecer datos</button></div><p class="text-muted">Vuelve a generar 8 medicos, 15 pacientes y 30 citas.</p></div>` : ""}`;
+  renderAgenda($("#sec-agenda", host));
+  const pac = $("#sec-pacientes", host);
+  if (pac) {
+    renderPacientesAdmin(pac);
+  }
+  const stats = $("#sec-stats", host);
+  if (stats) {
+    renderEstadisticas(stats);
+  }
+  const reset = $("#reset-datos", host);
+  if (reset) {
+    reset.addEventListener("click", () => {
+      const keepUser = state.user;
+      db = seedDb();
+      state.user = keepUser;
+      saveDb();
+      writeLog("AUDIT", "restablecer_datos", "datos_de_prueba=regenerados");
+      toast("Datos de prueba restablecidos.");
+      renderApp();
+    });
+  }
+};
+
+registerView({ id: "admin", title: "Panel operativo", order: 70, perm: "ver_agenda", render: renderAdmin });
