@@ -440,3 +440,94 @@ const asistenciaTable = (list, withEmpleado) => `
     <thead><tr><th>Fecha</th>${withEmpleado ? "<th>Empleado</th>" : ""}<th>Entrada</th><th>Salida</th><th>Horas</th><th>Horas extra</th><th>Origen</th></tr></thead>
     <tbody>${list.length === 0 ? `<tr><td colspan="7" class="empty-state">Sin registros de asistencia.</td></tr>` : list.map((a) => `<tr><td>${esc(a.fecha)}</td>${withEmpleado ? `<td>${esc(fullName(byId(db.empleados, a.empleadoId)))}</td>` : ""}<td>${esc(a.entrada)}</td><td>${a.salida ? esc(a.salida) : pill("abierta", "amber")}</td><td>${a.salida ? calcHoras(a).toFixed(2) : "-"}</td><td>${calcExtras(a) > 0 ? pill(`+${calcExtras(a).toFixed(2)} h`, "violet") : "0.00"}</td><td>${a.corregido ? pill("corregido RRHH", "blue") : "marcacion"}</td></tr>`).join("")}</tbody>
   </table></div>`;
+
+const renderMarcacion = (host) => {
+  const saved = localStorage.getItem(CLOCK_KEY);
+  host.innerHTML = `
+    <div class="panel stack-md">
+      <div class="panel-head"><div class="stack-xs"><h2 class="h3">Reloj del sistema</h2><p class="text-muted">Hora usada para marcar asistencia y validar horarios. Puedes simularla para las pruebas.</p></div>${pill(`${nowIso()} ${nowHHMM()}`, "blue")}</div>
+      <div class="form-actions">
+        <div class="field" style="flex: 1 1 16rem;"><label for="reloj">Hora simulada</label><input id="reloj" type="datetime-local" value="${saved || ""}"></div>
+        <button class="btn btn-surface" type="button" id="reloj-aplicar">Aplicar hora simulada</button>
+        <button class="btn btn-surface" type="button" id="reloj-real">Usar hora real</button>
+      </div>
+    </div>
+    <div class="panel stack-md">
+      <div class="panel-head"><div class="stack-xs"><h2 class="h3">Marcacion de asistencia</h2><p class="text-muted">El registro toma la hora del sistema al enviar el formulario. Jornada de 8 horas, extras sobre ese limite.</p></div>${pill("Formulario diario", "green")}</div>
+      <form id="form-marcar" class="stack-md" novalidate>
+        ${actorSelectHtml()}
+        <p class="field-error" id="marcar-error" role="alert"></p>
+        <div class="form-actions"><button class="btn btn-primary" type="submit" name="tipo" value="entrada">Marcar entrada</button><button class="btn btn-surface" type="submit" name="tipo" value="salida">Marcar salida</button></div>
+      </form>
+      <div id="marcar-historial" class="stack-sm"></div>
+    </div>`;
+  const refresh = () => {
+    const id = actorId(host);
+    const list = db.asistencias.filter((a) => a.empleadoId === id).sort((a, b) => `${b.fecha}${b.entrada}`.localeCompare(`${a.fecha}${a.entrada}`)).slice(0, 8);
+    $("#marcar-historial", host).innerHTML = `<h3 class="h4">Mis ultimos registros</h3>${asistenciaTable(list, false)}`;
+  };
+  refresh();
+  const actor = $("#actor", host);
+  if (actor) {
+    actor.addEventListener("change", refresh);
+  }
+  $("#reloj-aplicar", host).addEventListener("click", () => {
+    const value = $("#reloj", host).value;
+    if (!value) {
+      toast("Selecciona una fecha y hora para simular.", "error");
+      return;
+    }
+    localStorage.setItem(CLOCK_KEY, value);
+    toast("Hora simulada aplicada.");
+    renderApp();
+  });
+  $("#reloj-real", host).addEventListener("click", () => {
+    localStorage.removeItem(CLOCK_KEY);
+    toast("Se usa la hora real del equipo.");
+    renderApp();
+  });
+  const form = $("#form-marcar", host);
+  const errorNode = $("#marcar-error", host);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const tipo = event.submitter ? event.submitter.value : "entrada";
+    const empleadoId = actorId(host);
+    const fecha = nowIso();
+    const hora = nowHHMM();
+    const abierto = db.asistencias.filter((a) => a.empleadoId === empleadoId && !a.salida).sort((a, b) => `${b.fecha}${b.entrada}`.localeCompare(`${a.fecha}${a.entrada}`))[0];
+    let message = "";
+    if (tipo === "entrada") {
+      const hoy = db.asistencias.find((a) => a.empleadoId === empleadoId && a.fecha === fecha && !a.salida);
+      if (hoy) {
+        message = `Ya registraste una entrada hoy a las ${hoy.entrada} y aun no marcaste salida.`;
+      }
+    } else if (!abierto) {
+      message = "No tienes una entrada abierta para registrar la salida.";
+    } else if (abierto.fecha !== fecha) {
+      message = `El registro del ${abierto.fecha} supera las 24 horas y el empleado ya no puede modificarlo. Solicita una correccion a RRHH.`;
+    } else if (toMin(hora) <= toMin(abierto.entrada)) {
+      message = `La hora de salida (${hora}) debe ser posterior a la entrada (${abierto.entrada}).`;
+    }
+    errorNode.textContent = message;
+    if (message) {
+      toast(message, "error");
+      return;
+    }
+    const res = dispatch({ kind: "action", name: `marcar_${tipo}`, perm: "registrar_asistencia", data: { empleadoId, fecha, hora } });
+    if (!res.ok) {
+      errorNode.textContent = res.reason;
+      toast(res.reason, "error");
+      return;
+    }
+    if (tipo === "entrada") {
+      db.asistencias.push({ id: nextId(db.asistencias), empleadoId, fecha, entrada: hora, salida: null, creado: `${fecha}T${hora}`, corregido: false });
+      toast(`Entrada registrada a las ${hora}.`);
+    } else {
+      abierto.salida = hora;
+      const extras = calcExtras(abierto);
+      toast(`Salida registrada. Horas trabajadas: ${calcHoras(abierto).toFixed(2)}${extras > 0 ? `, horas extra: ${extras.toFixed(2)}` : ""}.`);
+    }
+    saveDb();
+    refresh();
+  });
+};
