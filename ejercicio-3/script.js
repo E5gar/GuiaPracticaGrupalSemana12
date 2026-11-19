@@ -531,3 +531,63 @@ const renderMarcacion = (host) => {
     refresh();
   });
 };
+
+const renderCorreccion = (host) => {
+  const recientes = db.asistencias.slice().sort((a, b) => `${b.fecha}${b.entrada}`.localeCompare(`${a.fecha}${a.entrada}`)).slice(0, 40);
+  const fields = [
+    { id: "registro", label: "Registro de asistencia", type: "select", wide: true, options: optionsFrom(recientes, (a) => `${a.fecha} - ${fullName(byId(db.empleados, a.empleadoId))} (${a.entrada} a ${a.salida || "sin salida"})`, "Selecciona el registro a corregir") },
+    { id: "entrada", label: "Nueva hora de entrada", type: "time" },
+    { id: "salida", label: "Nueva hora de salida", type: "time" },
+    { id: "motivo", label: "Motivo", type: "select", options: [{ value: "", label: "Selecciona el motivo" }, { value: "error de sistema", label: "Error de sistema" }, { value: "olvido", label: "Olvido" }, { value: "otro", label: "Otro" }] },
+    { id: "justificacion", label: "Justificacion (minimo 50 caracteres)", type: "textarea", wide: true, placeholder: "Describe con detalle por que se corrige el registro" }
+  ];
+  host.innerHTML = `
+    <div class="panel stack-md">
+      <div class="panel-head"><div class="stack-xs"><h2 class="h3">Correccion de asistencia</h2><p class="text-muted">Solo RRHH. Requiere motivo y justificacion obligatoria. Todo cambio queda en auditoria.</p></div>${pill("Solo RRHH", "amber")}</div>
+      <form id="form-correccion" class="stack-md" novalidate>
+        <div class="form-grid">${fields.map(fieldHtml).join("")}</div>
+        <div class="form-actions"><button class="btn btn-primary" type="submit">Aplicar correccion</button><button class="btn btn-surface" type="reset">Limpiar</button></div>
+      </form>
+    </div>`;
+  const form = $("#form-correccion", host);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const data = readForm(form);
+    const registro = byId(db.asistencias, data.registro);
+    const justificacion = sanitize(data.justificacion);
+    const errors = {};
+    if (!registro) {
+      errors.registro = "Selecciona el registro a corregir.";
+    }
+    if (!data.entrada) {
+      errors.entrada = "Indica la hora de entrada.";
+    }
+    if (!data.salida) {
+      errors.salida = "Indica la hora de salida.";
+    } else if (data.entrada && toMin(data.salida) <= toMin(data.entrada)) {
+      errors.salida = "La hora de salida debe ser posterior a la entrada.";
+    }
+    if (!data.motivo) {
+      errors.motivo = "Selecciona el motivo de la correccion.";
+    }
+    if (justificacion.length < 50) {
+      errors.justificacion = `La justificacion debe tener al menos 50 caracteres (actual: ${justificacion.length}).`;
+    }
+    setErrors(form, errors);
+    if (Object.keys(errors).length > 0) {
+      toast("La correccion no cumple las validaciones.", "error");
+      return;
+    }
+    const res = dispatch({ kind: "action", name: "corregir_asistencia", perm: "corregir_asistencia", data: { registroId: registro.id, empleadoId: registro.empleadoId, motivo: data.motivo, antes: `${registro.entrada}-${registro.salida || "sin salida"}`, despues: `${data.entrada}-${data.salida}` } });
+    if (!res.ok) {
+      toast(res.reason, "error");
+      return;
+    }
+    registro.entrada = data.entrada;
+    registro.salida = data.salida;
+    registro.corregido = true;
+    saveDb();
+    toast("Registro corregido. El cambio quedo auditado.");
+    renderCorreccion(host);
+  });
+};
